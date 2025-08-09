@@ -6,8 +6,8 @@ services:
     name: tahkeem
     # البيئة البرمجية
     env: python
-    # تحديد إصدار بايثون مستقر
-    pythonVersion: 3.11.x
+    # تحديد إصدار بايثون دقيق
+    pythonVersion: 3.11.8
     # أمر البناء (تثبيت المكتبات)
     buildCommand: "pip install -r requirements.txt"
     # أمر التشغيل
