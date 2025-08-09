@@ -8,8 +8,8 @@ services:
     env: python
     # تحديد إصدار بايثون دقيق
     pythonVersion: 3.11.8
-    # أمر البناء (تثبيت المكتبات)
-    buildCommand: "pip install -r requirements.txt"
+    # أمر البناء المُحدَّث لتجنب مشاكل ذاكرة التخزين المؤقت
+    buildCommand: "pip install --no-cache-dir -r requirements.txt"
     # أمر التشغيل
     startCommand: "gunicorn src.main:app"
     # متغيرات البيئة
