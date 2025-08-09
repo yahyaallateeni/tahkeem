@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة المحكم - منصة التحكيم</title>
+    <link rel="stylesheet" href="css/reviewer-style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="reviewer-container">
+        <!-- Header -->
+        <header class="reviewer-header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-gavel"></i>
+                    <span>منصة التحكيم</span>
+                </div>
+                <div class="user-info">
+                    <span id="reviewerName">محكم</span>
+                    <i class="fas fa-user-check"></i>
+                </div>
+                <button class="logout-btn" onclick="logout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    خروج
+                </button>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="reviewer-nav">
+            <ul>
+                <li class="nav-item active" data-tab="review">
+                    <i class="fas fa-check-circle"></i>
+                    <span>المراجعة</span>
+                </li>
+                <li class="nav-item" data-tab="progress">
+                    <i class="fas fa-chart-line"></i>
+                    <span>التقدم</span>
+                </li>
+                <li class="nav-item" data-tab="history">
+                    <i class="fas fa-history"></i>
+                    <span>السجل</span>
+                </li>
+                <li class="nav-item" data-tab="contact">
+                    <i class="fas fa-envelope"></i>
+                    <span>التواصل</span>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Review Tab -->
+            <div id="review" class="tab-content active">
+                <div class="review-header">
+                    <h1>مراجعة التصنيفات</h1>
+                    <div class="review-stats">
+                        <div class="stat-item">
+                            <span class="stat-number" id="pendingCount">0</span>
+                            <span class="stat-label">في الانتظار</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number" id="todayReviews">0</span>
+                            <span class="stat-label">اليوم</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="review-workspace">
+                    <div class="review-card" id="reviewCard">
+                        <div class="review-loading" id="reviewLoading">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>جاري تحميل البيانات...</p>
+                        </div>
+
+                        <div class="review-content" id="reviewContent" style="display: none;">
+                            <div class="text-section">
+                                <h3>النص المراد مراجعته:</h3>
+                                <div class="text-display" id="textDisplay">
+                                    <!-- النص سيظهر هنا -->
+                                </div>
+                            </div>
+
+                            <div class="tags-section">
+                                <h3>التصنيف الحالي:</h3>
+                                <div class="current-tags">
+                                    <div class="tag-item">
+                                        <label>الإنجليزية:</label>
+                                        <span class="tag tag-en" id="currentTagEn"></span>
+                                    </div>
+                                    <div class="tag-item">
+                                        <label>العربية:</label>
+                                        <span class="tag tag-ar" id="currentTagAr"></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="review-form-section">
+                                <form id="quickReviewForm">
+                                    <input type="hidden" id="currentDataId">
+                                    
+                                    <div class="decision-buttons">
+                                        <button type="button" class="decision-btn approve-btn" onclick="quickDecision('approve')">
+                                            <i class="fas fa-check"></i>
+                                            موافقة
+                                        </button>
+                                        <button type="button" class="decision-btn modify-btn" onclick="showModifyForm()">
+                                            <i class="fas fa-edit"></i>
+                                            تعديل
+                                        </button>
+                                        <button type="button" class="decision-btn reject-btn" onclick="quickDecision('reject')">
+                                            <i class="fas fa-times"></i>
+                                            رفض
+                                        </button>
+                                    </div>
+
+                                    <div id="modifyForm" class="modify-form" style="display: none;">
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label for="newTagEn">التصنيف الجديد (إنجليزي):</label>
+                                                <input type="text" id="newTagEn" name="new_tag_en">
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="newTagAr">التصنيف الجديد (عربي):</label>
+                                                <input type="text" id="newTagAr" name="new_tag_ar">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="reviewNotes">ملاحظات:</label>
+                                            <textarea id="reviewNotes" name="notes" rows="2" placeholder="اختياري..."></textarea>
+                                        </div>
+                                        <div class="form-actions">
+                                            <button type="button" class="cancel-btn" onclick="hideModifyForm()">إلغاء</button>
+                                            <button type="button" class="save-btn" onclick="submitModification()">حفظ التعديل</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="confidence-section">
+                                        <label for="confidence">مستوى الثقة:</label>
+                                        <div class="confidence-slider">
+                                            <input type="range" id="confidence" min="1" max="10" value="5">
+                                            <span id="confidenceValue">5</span>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <div class="review-actions">
+                                <button class="skip-btn" onclick="skipCurrent()">
+                                    <i class="fas fa-forward"></i>
+                                    تخطي
+                                </button>
+                                <button class="next-btn" onclick="loadNextReview()">
+                                    <i class="fas fa-arrow-left"></i>
+                                    التالي
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="no-data" id="noData" style="display: none;">
+                            <i class="fas fa-check-circle"></i>
+                            <h3>تم الانتهاء من جميع المراجعات!</h3>
+                            <p>لا توجد بيانات جديدة للمراجعة في الوقت الحالي</p>
+                        </div>
+                    </div>
+
+                    <div class="keyboard-shortcuts">
+                        <h4>اختصارات لوحة المفاتيح:</h4>
+                        <div class="shortcuts-list">
+                            <span><kbd>A</kbd> موافقة</span>
+                            <span><kbd>M</kbd> تعديل</span>
+                            <span><kbd>R</kbd> رفض</span>
+                            <span><kbd>N</kbd> التالي</span>
+                            <span><kbd>S</kbd> تخطي</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Tab -->
+            <div id="progress" class="tab-content">
+                <div class="progress-header">
+                    <h1>تقدم المراجعة</h1>
+                    <p>تتبع أدائك وإنجازاتك</p>
+                </div>
+
+                <div class="progress-stats">
+                    <div class="progress-card">
+                        <div class="progress-icon">
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                        <div class="progress-info">
+                            <h3 id="totalReviews">0</h3>
+                            <p>إجمالي المراجعات</p>
+                        </div>
+                    </div>
+                    <div class="progress-card">
+                        <div class="progress-icon">
+                            <i class="fas fa-thumbs-up"></i>
+                        </div>
+                        <div class="progress-info">
+                            <h3 id="approvalRate">0%</h3>
+                            <p>معدل الموافقة</p>
+                        </div>
+                    </div>
+                    <div class="progress-card">
+                        <div class="progress-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="progress-info">
+                            <h3 id="avgTime">0</h3>
+                            <p>متوسط الوقت (ثانية)</p>
+                        </div>
+                    </div>
+                    <div class="progress-card">
+                        <div class="progress-icon">
+                            <i class="fas fa-calendar-day"></i>
+                        </div>
+                        <div class="progress-info">
+                            <h3 id="todayProgress">0</h3>
+                            <p>مراجعات اليوم</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="progress-chart">
+                    <h3>التقدم الأسبوعي</h3>
+                    <div class="chart-placeholder">
+                        <p>سيتم إضافة الرسوم البيانية قريباً</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Tab -->
+            <div id="history" class="tab-content">
+                <div class="history-header">
+                    <h1>سجل المراجعات</h1>
+                    <div class="history-filters">
+                        <select id="historyFilter" onchange="loadHistory()">
+                            <option value="all">جميع المراجعات</option>
+                            <option value="approve">الموافقات</option>
+                            <option value="modify">التعديلات</option>
+                            <option value="reject">الرفض</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="history-list" id="historyList">
+                    <!-- سيتم ملؤها بـ JavaScript -->
+                </div>
+            </div>
+
+            <!-- Contact Tab -->
+            <div id="contact" class="tab-content">
+                <div class="contact-header">
+                    <h1>التواصل مع الإدارة</h1>
+                    <p>أرسل استفساراتك أو اقتراحاتك</p>
+                </div>
+
+                <div class="contact-form-container">
+                    <form id="contactForm" class="contact-form">
+                        <div class="form-group">
+                            <label for="subject">الموضوع:</label>
+                            <select id="subject" name="subject" required>
+                                <option value="">اختر الموضوع</option>
+                                <option value="technical">مشكلة تقنية</option>
+                                <option value="suggestion">اقتراح</option>
+                                <option value="question">استفسار</option>
+                                <option value="other">أخرى</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="message">الرسالة:</label>
+                            <textarea id="message" name="message" rows="6" required placeholder="اكتب رسالتك هنا..."></textarea>
+                        </div>
+                        <button type="submit" class="send-btn">
+                            <i class="fas fa-paper-plane"></i>
+                            إرسال الرسالة
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/reviewer.js"></script>
+</body>
+</html>
+

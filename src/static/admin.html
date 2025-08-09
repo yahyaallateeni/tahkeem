@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة تحكم الآدمن - منصة التحكيم</title>
+    <link rel="stylesheet" href="css/admin-style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-gavel"></i>
+                    <span>منصة التحكيم</span>
+                </div>
+                <div class="user-info">
+                    <i class="fas fa-user-shield"></i>
+                    <span id="adminName">آدمن</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <ul>
+                    <li class="nav-item active" data-tab="dashboard">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <span>لوحة المعلومات</span>
+                    </li>
+                    <li class="nav-item" data-tab="upload">
+                        <i class="fas fa-upload"></i>
+                        <span>رفع البيانات</span>
+                    </li>
+                    <li class="nav-item" data-tab="review">
+                        <i class="fas fa-check-circle"></i>
+                        <span>مراجعة التصنيفات</span>
+                    </li>
+                    <li class="nav-item" data-tab="users">
+                        <i class="fas fa-users"></i>
+                        <span>إدارة المستخدمين</span>
+                    </li>
+                    <li class="nav-item" data-tab="reports">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>التقارير والإحصائيات</span>
+                    </li>
+                    <li class="nav-item" data-tab="settings">
+                        <i class="fas fa-cog"></i>
+                        <span>الإعدادات</span>
+                    </li>
+                </ul>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="logout-btn" onclick="logout()">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>تسجيل الخروج</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <div class="page-header">
+                    <h1>لوحة المعلومات</h1>
+                    <p>نظرة عامة على حالة المنصة</p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-database"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalData">0</h3>
+                            <p>إجمالي البيانات</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="pendingData">0</h3>
+                            <p>في انتظار المراجعة</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-check"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="reviewedData">0</h3>
+                            <p>تم مراجعتها</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="fas fa-percentage"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="completionRate">0%</h3>
+                            <p>نسبة الإنجاز</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-charts">
+                    <div class="chart-card">
+                        <h3>جلسات الرفع الأخيرة</h3>
+                        <div id="uploadSessionsList" class="upload-sessions-list">
+                            <!-- سيتم ملؤها بـ JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Tab -->
+            <div id="upload" class="tab-content">
+                <div class="page-header">
+                    <h1>رفع البيانات</h1>
+                    <p>رفع ملفات CSV للمراجعة والتصنيف</p>
+                </div>
+
+                <div class="upload-section">
+                    <div class="upload-card">
+                        <div class="upload-area" id="uploadArea">
+                            <div class="upload-icon">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </div>
+                            <h3>اسحب الملف هنا أو اضغط للاختيار</h3>
+                            <p>يدعم ملفات CSV فقط</p>
+                            <input type="file" id="csvFile" accept=".csv" style="display: none;">
+                            <button class="upload-btn" onclick="document.getElementById('csvFile').click()">
+                                اختيار ملف
+                            </button>
+                        </div>
+
+                        <div class="upload-progress" id="uploadProgress" style="display: none;">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progressFill"></div>
+                            </div>
+                            <p id="progressText">جاري الرفع...</p>
+                        </div>
+
+                        <div class="upload-result" id="uploadResult" style="display: none;">
+                            <!-- نتائج الرفع -->
+                        </div>
+                    </div>
+
+                    <div class="upload-info">
+                        <h3>تعليمات الرفع</h3>
+                        <ul>
+                            <li>يجب أن يكون الملف بصيغة CSV</li>
+                            <li>يدعم التنسيق الأصلي مع الوسوم JSON</li>
+                            <li>سيتم تحويل الملف تلقائياً للتنسيق المطلوب</li>
+                            <li>يمكن رفع ملفات بترميزات مختلفة</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Review Tab -->
+            <div id="review" class="tab-content">
+                <div class="page-header">
+                    <h1>مراجعة التصنيفات</h1>
+                    <p>مراجعة وتصحيح تصنيفات النصوص</p>
+                </div>
+
+                <div class="review-controls">
+                    <div class="filter-group">
+                        <label for="statusFilter">حالة البيانات:</label>
+                        <select id="statusFilter" onchange="loadReviewData()">
+                            <option value="pending">في انتظار المراجعة</option>
+                            <option value="reviewed">تم مراجعتها</option>
+                            <option value="approved">تم اعتمادها</option>
+                        </select>
+                    </div>
+                    <button class="refresh-btn" onclick="loadReviewData()">
+                        <i class="fas fa-sync-alt"></i>
+                        تحديث
+                    </button>
+                </div>
+
+                <div class="review-container">
+                    <div id="reviewList" class="review-list">
+                        <!-- سيتم ملؤها بـ JavaScript -->
+                    </div>
+
+                    <div class="pagination" id="reviewPagination">
+                        <!-- أزرار التنقل -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Users Tab -->
+            <div id="users" class="tab-content">
+                <div class="page-header">
+                    <h1>إدارة المستخدمين</h1>
+                    <p>إنشاء وإدارة حسابات المحكمين</p>
+                </div>
+
+                <div class="users-controls">
+                    <button class="add-user-btn" onclick="showAddUserModal()">
+                        <i class="fas fa-plus"></i>
+                        إضافة محكم جديد
+                    </button>
+                </div>
+
+                <div class="users-table">
+                    <table id="usersTable">
+                        <thead>
+                            <tr>
+                                <th>اسم المستخدم</th>
+                                <th>النوع</th>
+                                <th>البريد الإلكتروني</th>
+                                <th>تاريخ الإنشاء</th>
+                                <th>الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <!-- سيتم ملؤها بـ JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Reports Tab -->
+            <div id="reports" class="tab-content">
+                <div class="page-header">
+                    <h1>التقارير والإحصائيات</h1>
+                    <p>تقارير مفصلة عن أداء المنصة</p>
+                </div>
+
+                <div class="reports-grid">
+                    <div class="report-card">
+                        <h3>تقرير الأداء اليومي</h3>
+                        <div class="report-content">
+                            <p>عدد المراجعات اليوم: <span id="todayReviews">0</span></p>
+                            <p>متوسط الوقت للمراجعة: <span id="avgReviewTime">0</span> ثانية</p>
+                        </div>
+                    </div>
+
+                    <div class="report-card">
+                        <h3>أداء المحكمين</h3>
+                        <div id="reviewersPerformance" class="reviewers-performance">
+                            <!-- سيتم ملؤها بـ JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings" class="tab-content">
+                <div class="page-header">
+                    <h1>الإعدادات</h1>
+                    <p>إعدادات النظام والحساب</p>
+                </div>
+
+                <div class="settings-sections">
+                    <div class="settings-card">
+                        <h3>إعدادات الحساب</h3>
+                        <form id="accountSettingsForm">
+                            <div class="form-group">
+                                <label for="newPassword">كلمة المرور الجديدة</label>
+                                <input type="password" id="newPassword" name="newPassword">
+                            </div>
+                            <div class="form-group">
+                                <label for="confirmPassword">تأكيد كلمة المرور</label>
+                                <input type="password" id="confirmPassword" name="confirmPassword">
+                            </div>
+                            <button type="submit" class="save-btn">حفظ التغييرات</button>
+                        </form>
+                    </div>
+
+                    <div class="settings-card">
+                        <h3>إعدادات النظام</h3>
+                        <div class="system-info">
+                            <p>إصدار المنصة: 2.0</p>
+                            <p>آخر تحديث: اليوم</p>
+                            <p>عدد المستخدمين النشطين: <span id="activeUsers">0</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Add User Modal -->
+    <div id="addUserModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>إضافة محكم جديد</h3>
+                <button class="close-btn" onclick="hideAddUserModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="addUserForm">
+                <div class="form-group">
+                    <label for="newUsername">اسم المستخدم</label>
+                    <input type="text" id="newUsername" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="newUserPassword">كلمة المرور</label>
+                    <input type="password" id="newUserPassword" name="password" required>
+                </div>
+                <div class="form-group">
+                    <label for="newUserEmail">البريد الإلكتروني</label>
+                    <input type="email" id="newUserEmail" name="email" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="cancel-btn" onclick="hideAddUserModal()">إلغاء</button>
+                    <button type="submit" class="save-btn">إضافة المحكم</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Review Modal -->
+    <div id="reviewModal" class="modal" style="display: none;">
+        <div class="modal-content review-modal">
+            <div class="modal-header">
+                <h3>مراجعة التصنيف</h3>
+                <button class="close-btn" onclick="hideReviewModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="review-content">
+                <div class="text-display">
+                    <h4>النص:</h4>
+                    <p id="reviewText"></p>
+                </div>
+                <div class="tags-display">
+                    <div class="tag-group">
+                        <h4>التصنيف الحالي:</h4>
+                        <div class="current-tags">
+                            <span class="tag tag-en" id="currentTagEn"></span>
+                            <span class="tag tag-ar" id="currentTagAr"></span>
+                        </div>
+                    </div>
+                </div>
+                <form id="reviewForm">
+                    <input type="hidden" id="reviewDataId">
+                    <div class="form-group">
+                        <label>قرار المراجعة:</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="decision" value="approve" checked>
+                                <span>موافقة</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="decision" value="modify">
+                                <span>تعديل</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="decision" value="reject">
+                                <span>رفض</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="modifySection" class="modify-section" style="display: none;">
+                        <div class="form-group">
+                            <label for="newTagEn">التصنيف الجديد (إنجليزي):</label>
+                            <input type="text" id="newTagEn" name="new_tag_en">
+                        </div>
+                        <div class="form-group">
+                            <label for="newTagAr">التصنيف الجديد (عربي):</label>
+                            <input type="text" id="newTagAr" name="new_tag_ar">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="reviewNotes">ملاحظات:</label>
+                        <textarea id="reviewNotes" name="notes" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="confidence">مستوى الثقة (1-10):</label>
+                        <input type="range" id="confidence" name="confidence" min="1" max="10" value="5">
+                        <span id="confidenceValue">5</span>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="cancel-btn" onclick="hideReviewModal()">إلغاء</button>
+                        <button type="submit" class="save-btn">إرسال المراجعة</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/admin.js"></script>
+</body>
+</html>
+
