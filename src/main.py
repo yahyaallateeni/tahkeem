@@ -29,6 +29,25 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Initialize the database with the Flask app.
 db.init_app(app)
 
+# --- START OF MOVED CODE ---
+# This block is now outside the if __name__ == '__main__':
+# so it runs every time the application starts on Render.
+with app.app_context():
+    # This will create all the database tables in the PostgreSQL database.
+    db.create_all()
+
+    # This temporary code runs the create_admin.py script to set up the admin user.
+    # It's important to run this after db.create_all() to ensure the tables exist.
+    print("Running create_admin.py script...")
+    try:
+        # تأكد من أن المسار صحيح إذا كان ملف create_admin.py في مكان آخر
+        subprocess.run(['python', 'src/create_admin.py'], check=True, cwd=os.path.dirname(__file__))
+        print("create_admin.py script finished.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error running create_admin.py: {e}")
+# --- END OF MOVED CODE ---
+
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
@@ -50,18 +69,5 @@ def serve(path):
 
 # Main entry point for the application.
 if __name__ == '__main__':
-    with app.app_context():
-        # This will create all the database tables in the PostgreSQL database.
-        db.create_all()
-    
-        # This temporary code runs the create_admin.py script to set up the admin user.
-        # It's important to run this after db.create_all() to ensure the tables exist.
-        print("Running create_admin.py script...")
-        try:
-            subprocess.run(['python', 'src/create_admin.py'], check=True, cwd=os.path.dirname(__file__))
-            print("create_admin.py script finished.")
-        except subprocess.CalledProcessError as e:
-            print(f"Error running create_admin.py: {e}")
-            
     # Starts the Flask development server.
     app.run(host='0.0.0.0', port=5000, debug=True)
