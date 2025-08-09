@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess # تمت إضافة هذا السطر
 # DON'T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -39,7 +40,7 @@ with app.app_context():
 def serve(path):
     static_folder_path = app.static_folder
     if static_folder_path is None:
-            return "Static folder not configured", 404
+        return "Static folder not configured", 404
 
     if path != "" and os.path.exists(os.path.join(static_folder_path, path)):
         return send_from_directory(static_folder_path, path)
@@ -52,4 +53,13 @@ def serve(path):
 
 
 if __name__ == '__main__':
+    # هذه الأسطر مؤقتة لإنشاء المستخدم المدير
+    print("Running create_admin.py script...")
+    try:
+        # تأكد من أن المسار صحيح إذا كان ملف create_admin.py في مكان آخر
+        subprocess.run(['python', 'src/create_admin.py'], check=True, cwd=os.path.dirname(__file__))
+        print("create_admin.py script finished.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error running create_admin.py: {e}")
+        
     app.run(host='0.0.0.0', port=5000, debug=True)
