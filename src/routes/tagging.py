@@ -4,57 +4,54 @@ import os
 import json
 import pandas as pd
 from datetime import datetime
+from sqlalchemy import func
+import traceback
+
 from src.models.tagging import db, TaggingData, TaggingReview, UploadSession, get_arabic_tag
 from src.models.user import User
 
 tagging_bp = Blueprint('tagging', __name__)
 
 UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'xlsx', 'xls'}  # إكسل فقط
+ALLOWED_EXTENSIONS = {'xlsx', 'xls'}  # Excel فقط
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# ============
-# Excel parser
-# ============
+# ============ Excel Parser حسب القالب ============
 def parse_excel_specific(file_path):
     """
-    يعالج ملفات إكسل بالقالب التالي (مثل tags_bilingual.xlsx):
-      - Paragraph            => النص
-      - Ideological_EN/AR
-      - Syntactic_EN/AR
-      - Functional_EN/AR
-      - Discourse_EN/AR
-    ينتج قائمة عناصر كل عنصر فيه: text, original_tags(json str), tag_en, tag_ar
+    يتوقع أعمدة مثل:
+      Paragraph / text
+      Ideological_EN / Ideological_AR
+      Syntactic_EN / Syntactic_AR
+      Functional_EN / Functional_AR
+      Discourse_EN / Discourse_AR
     """
     df = pd.read_excel(file_path)
 
-    # أعمدة مطلوبة بالاسم تماماً (حسب القالب)
-    required_any_text = ['Paragraph', 'text']  # نسمح بـ Paragraph أو text
+    # نص
     text_col = None
-    for name in required_any_text:
-        if name in df.columns:
-            text_col = name
+    for candidate in ['Paragraph', 'text']:
+        if candidate in df.columns:
+            text_col = candidate
             break
     if not text_col:
         raise Exception("ملف الإكسل يجب أن يحتوي عمود Paragraph أو text للنص.")
 
-    # أعمدة التصنيفات (وجودها اختياري لكن إن وجدت تُضمّن)
     tag_columns = [
         'Ideological_EN', 'Ideological_AR',
-        'Syntactic_EN', 'Syntactic_AR',
-        'Functional_EN', 'Functional_AR',
-        'Discourse_EN', 'Discourse_AR'
+        'Syntactic_EN',   'Syntactic_AR',
+        'Functional_EN',  'Functional_AR',
+        'Discourse_EN',   'Discourse_AR'
     ]
 
     processed = []
     for _, row in df.iterrows():
         text = (str(row[text_col]).strip() if pd.notna(row[text_col]) else '')
         if not text:
-            continue  # تجاهل صفوف بلا نص
+            continue
 
-        # اجمع الوسوم المتوفرة في dict
         tags = {}
         for col in tag_columns:
             if col in df.columns and pd.notna(row.get(col)):
@@ -62,7 +59,6 @@ def parse_excel_specific(file_path):
                 if val:
                     tags[col] = val
 
-        # اختر وسمًا رئيسيًا (EN/AR) بحسب أول تصنيف متوفر بالترتيب
         tag_en = ''
         tag_ar = ''
         pairs = [
@@ -79,7 +75,6 @@ def parse_excel_specific(file_path):
                 tag_ar = ar_val or (get_arabic_tag(en_val) if en_val else '')
                 break
 
-        # fallback لو لا يوجد أي تصنيف
         if not tag_en and not tag_ar:
             tag_en = 'Unknown'
             tag_ar = 'غير محدد'
@@ -87,132 +82,124 @@ def parse_excel_specific(file_path):
         processed.append({
             'text': text,
             'original_tags': json.dumps(tags, ensure_ascii=False) if tags else '{}',
-            'tag_en': tag_en[:100],  # قص بسيط للاحتياط
-            'tag_ar': tag_ar[:100]
+            'tag_en': (tag_en or '')[:100],
+            'tag_ar': (tag_ar or '')[:100]
         })
 
     return processed
 
-# ==============================
-# رفع ملف (Excel فقط) وحفظ السجلات
-# ==============================
-@tagging_bp.route('/upload-csv', methods=['POST'])  # الإندبوينت يبقى كما هو لعدم كسر الواجهة
+# ========== رفع ملف (Excel فقط) ==========
+@tagging_bp.route('/upload-csv', methods=['POST'])  # احتفاظ بالمسار القديم لواجهةك
 def upload_csv():
-    """رفع ملف Excel فقط (xlsx/xls) وفق القالب المحدد"""
-    if 'user_id' not in session:
-        return jsonify({'error': 'غير مصرح بالوصول'}), 401
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'unauthorized'}), 401
 
-    user = User.query.get(session['user_id'])
-    if not user or user.user_type != 'admin':
-        return jsonify({'error': 'صلاحيات غير كافية'}), 403
+        user = User.query.get(session['user_id'])
+        if not user or (user.user_type or '').lower() != 'admin':
+            return jsonify({'error': 'forbidden'}), 403
 
-    if 'file' not in request.files:
-        return jsonify({'error': 'لم يتم اختيار ملف'}), 400
+        if 'file' not in request.files:
+            return jsonify({'error': 'لم يتم اختيار ملف'}), 400
 
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'لم يتم اختيار ملف'}), 400
+        file = request.files['file']
+        if not file or file.filename == '':
+            return jsonify({'error': 'لم يتم اختيار ملف'}), 400
 
-    if file and allowed_file(file.filename):
+        if not allowed_file(file.filename):
+            return jsonify({'error': 'نوع الملف غير مدعوم. يرجى رفع ملف Excel (xlsx/xls)'}), 400
+
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        filename = secure_filename(file.filename)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{timestamp}_{filename}"
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(file_path)
+
+        upload_session = UploadSession(filename=filename, uploaded_by=user.id, status='processing')
+        db.session.add(upload_session)
+        db.session.commit()
+
         try:
-            os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+            processed = parse_excel_specific(file_path)
 
-            filename = secure_filename(file.filename)
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = f"{timestamp}_{filename}"
-            file_path = os.path.join(UPLOAD_FOLDER, filename)
-            file.save(file_path)
+            upload_session.total_records = len(processed)
+            successful = 0
+            failed = 0
+            errors = []
 
-            upload_session = UploadSession(
-                filename=filename,
-                uploaded_by=user.id,
-                status='processing'
-            )
-            db.session.add(upload_session)
+            for i, item in enumerate(processed):
+                try:
+                    rec = TaggingData(
+                        text=item['text'],
+                        original_tags=item['original_tags'],
+                        tag_en=item['tag_en'],
+                        tag_ar=item['tag_ar'],
+                        uploaded_by=user.id
+                    )
+                    db.session.add(rec)
+                    successful += 1
+                except Exception as e:
+                    failed += 1
+                    errors.append(f"السطر {i+1}: {str(e)}")
+
+            upload_session.processed_records = successful
+            upload_session.failed_records = failed
+            upload_session.status = 'completed'
+            upload_session.error_log = '\n'.join(errors) if errors else None
             db.session.commit()
 
             try:
-                # معالجة إكسل فقط
-                processed_data = parse_excel_specific(file_path)
+                os.remove(file_path)
+            except Exception:
+                pass
 
-                upload_session.total_records = len(processed_data)
-                successful_records = 0
-                failed_records = 0
-                errors = []
-
-                for i, data in enumerate(processed_data):
-                    try:
-                        tagging_data = TaggingData(
-                            text=data['text'],
-                            original_tags=data['original_tags'],
-                            tag_en=data['tag_en'],
-                            tag_ar=data['tag_ar'],
-                            uploaded_by=user.id
-                        )
-                        db.session.add(tagging_data)
-                        successful_records += 1
-                    except Exception as e:
-                        failed_records += 1
-                        errors.append(f"السطر {i+1}: {str(e)}")
-
-                upload_session.processed_records = successful_records
-                upload_session.failed_records = failed_records
-                upload_session.status = 'completed'
-                upload_session.error_log = '\n'.join(errors) if errors else None
-
-                db.session.commit()
-                # إزالة الملف بعد المعالجة
-                try:
-                    os.remove(file_path)
-                except Exception:
-                    pass
-
-                return jsonify({
-                    'success': True,
-                    'message': f'تم رفع الملف بنجاح. تم معالجة {successful_records} سجل',
-                    'session_id': upload_session.id,
-                    'total_records': len(processed_data),
-                    'successful_records': successful_records,
-                    'failed_records': failed_records
-                })
-
-            except Exception as e:
-                upload_session.status = 'failed'
-                upload_session.error_log = str(e)
-                db.session.commit()
-                try:
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                except Exception:
-                    pass
-                return jsonify({'error': f'خطأ في معالجة الملف: {str(e)}'}), 500
-
+            return jsonify({
+                'success': True,
+                'message': f'تم رفع الملف بنجاح. تم معالجة {successful} سجل',
+                'session_id': upload_session.id,
+                'total_records': len(processed),
+                'successful_records': successful,
+                'failed_records': failed
+            })
         except Exception as e:
-            return jsonify({'error': f'خطأ في رفع الملف: {str(e)}'}), 500
+            upload_session.status = 'failed'
+            upload_session.error_log = str(e)
+            db.session.commit()
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception:
+                pass
+            return jsonify({'error': 'server_error', 'details': str(e)}), 500
 
-    return jsonify({'error': 'نوع الملف غير مدعوم. يرجى رفع ملف Excel (xlsx/xls)'}), 400
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': 'server_error', 'details': str(e)}), 500
 
-# =========================
-# بقية المسارات بدون تغيير
-# =========================
+# ========== جلب بيانات للمراجعة ==========
 @tagging_bp.route('/data', methods=['GET'])
 def get_tagging_data():
     if 'user_id' not in session:
-        return jsonify({'error': 'غير مصرح بالوصول'}), 401
+        return jsonify({'error': 'unauthorized'}), 401
 
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
     status = request.args.get('status', 'pending')
 
     query = TaggingData.query.filter_by(status=status)
+
     user = User.query.get(session['user_id'])
-    if user.user_type == 'reviewer':
+    if (user.user_type or '').lower() == 'reviewer':
         reviewed_ids = db.session.query(TaggingReview.data_id).filter_by(reviewer_id=user.id).subquery()
         query = query.filter(~TaggingData.id.in_(reviewed_ids))
 
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
     return jsonify({
-        'data': [item.to_dict() for item in pagination.items],
+        'data': [{
+            'id': d.id, 'text': d.text, 'tag_en': d.tag_en, 'tag_ar': d.tag_ar,
+            'status': d.status, 'uploaded_by': d.uploaded_by
+        } for d in pagination.items],
         'total': pagination.total,
         'pages': pagination.pages,
         'current_page': page,
@@ -220,18 +207,18 @@ def get_tagging_data():
         'has_prev': pagination.has_prev
     })
 
+# ========== إرسال مراجعة ==========
 @tagging_bp.route('/review', methods=['POST'])
 def submit_review():
     if 'user_id' not in session:
-        return jsonify({'error': 'غير مصرح بالوصول'}), 401
+        return jsonify({'error': 'unauthorized'}), 401
 
     user = User.query.get(session['user_id'])
-    if user.user_type not in ['admin', 'reviewer']:
-        return jsonify({'error': 'صلاحيات غير كافية'}), 403
+    if (user.user_type or '').lower() not in ['admin', 'reviewer']:
+        return jsonify({'error': 'forbidden'}), 403
 
-    data = request.get_json()
-    required_fields = ['data_id', 'decision']
-    for field in required_fields:
+    data = request.get_json() or {}
+    for field in ['data_id', 'decision']:
         if field not in data:
             return jsonify({'error': f'الحقل {field} مطلوب'}), 400
 
@@ -239,11 +226,8 @@ def submit_review():
     if not tagging_data:
         return jsonify({'error': 'البيانات غير موجودة'}), 404
 
-    existing_review = TaggingReview.query.filter_by(
-        data_id=data['data_id'],
-        reviewer_id=user.id
-    ).first()
-    if existing_review:
+    exists = TaggingReview.query.filter_by(data_id=data['data_id'], reviewer_id=user.id).first()
+    if exists:
         return jsonify({'error': 'تم مراجعة هذا العنصر مسبقاً'}), 400
 
     review = TaggingReview(
@@ -268,95 +252,111 @@ def submit_review():
     db.session.commit()
     return jsonify({'success': True, 'message': 'تم إرسال المراجعة بنجاح', 'review_id': review.id})
 
+# ========== إحصائيات عامة ==========
 @tagging_bp.route('/stats', methods=['GET'])
 def get_stats():
-    if 'user_id' not in session:
-        return jsonify({'error': 'غير مصرح بالوصول'}), 401
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'unauthorized'}), 401
 
-    user = User.query.get(session['user_id'])
+        total_data = db.session.query(func.count(TaggingData.id)).scalar() or 0
+        pending_data = db.session.query(func.count(TaggingData.id)).filter(TaggingData.status == 'pending').scalar() or 0
+        reviewed_data = db.session.query(func.count(TaggingData.id)).filter(TaggingData.status == 'reviewed').scalar() or 0
+        approved_data = db.session.query(func.count(TaggingData.id)).filter(TaggingData.status == 'approved').scalar() or 0
 
-    total_data = TaggingData.query.count()
-    pending_data = TaggingData.query.filter_by(status='pending').count()
-    reviewed_data = TaggingData.query.filter_by(status='reviewed').count()
-    approved_data = TaggingData.query.filter_by(status='approved').count()
-
-    stats = {
-        'total_data': total_data,
-        'pending_data': pending_data,
-        'reviewed_data': reviewed_data,
-        'approved_data': approved_data,
-        'completion_rate': round((reviewed_data + approved_data) / total_data * 100, 2) if total_data > 0 else 0
-    }
-
-    if user.user_type == 'reviewer':
-        user_reviews = TaggingReview.query.filter_by(reviewer_id=user.id).count()
-        user_approvals = TaggingReview.query.filter_by(reviewer_id=user.id, decision='approve').count()
-        stats.update({
-            'user_reviews': user_reviews,
-            'user_approvals': user_approvals,
-            'user_approval_rate': round(user_approvals / user_reviews * 100, 2) if user_reviews > 0 else 0
+        return jsonify({
+            'total_data': total_data,
+            'pending_data': pending_data,
+            'reviewed_data': reviewed_data,
+            'approved_data': approved_data,
+            'completion_rate': round(((reviewed_data + approved_data) / total_data * 100), 2) if total_data > 0 else 0
         })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': 'server_error', 'details': str(e)}), 500
 
-    return jsonify(stats)
-
+# ========== جلسات الرفع ==========
 @tagging_bp.route('/upload-sessions', methods=['GET'])
 def get_upload_sessions():
-    if 'user_id' not in session:
-        return jsonify({'error': 'غير مصرح بالوصول'}), 401
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'unauthorized'}), 401
 
-    user = User.query.get(session['user_id'])
-    if user.user_type != 'admin':
-        return jsonify({'error': 'صلاحيات غير كافية'}), 403
+        user = User.query.get(session['user_id'])
+        if not user or (user.user_type or '').lower() != 'admin':
+            return jsonify({'error': 'forbidden'}), 403
 
-    sessions = UploadSession.query.order_by(UploadSession.uploaded_at.desc()).all()
-    return jsonify([session.to_dict() for session in sessions])
+        sessions = UploadSession.query.order_by(UploadSession.uploaded_at.desc()).all()
+        out = []
+        for s in sessions:
+            out.append({
+                'id': getattr(s, 'id', None),
+                'filename': getattr(s, 'filename', None),
+                'status': getattr(s, 'status', None),
+                'total_records': getattr(s, 'total_records', None),
+                'processed_records': getattr(s, 'processed_records', None),
+                'failed_records': getattr(s, 'failed_records', None),
+                'error_log': getattr(s, 'error_log', None),
+                'uploaded_at': (s.uploaded_at.isoformat() if getattr(s, 'uploaded_at', None) else None),
+            })
+        return jsonify(out)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': 'server_error', 'details': str(e)}), 500
 
+# ========== إحصائيات اليوم ==========
 @tagging_bp.route('/daily-stats', methods=['GET'])
 def get_daily_stats():
-    if 'user_id' not in session:
-        return jsonify({'error': 'غير مصرح بالوصول'}), 401
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'unauthorized'}), 401
 
-    user = User.query.get(session['user_id'])
-    if user.user_type != 'admin':
-        return jsonify({'error': 'صلاحيات غير كافية'}), 403
+        user = User.query.get(session['user_id'])
+        if not user or (user.user_type or '').lower() != 'admin':
+            return jsonify({'error': 'forbidden'}), 403
 
-    today = datetime.now().date()
-    daily_reviews = TaggingReview.query.filter(
-        TaggingReview.reviewed_at >= today
-    ).count()
+        today = datetime.now().date()
+        daily_reviews = db.session.query(func.count(TaggingReview.id))\
+            .filter(TaggingReview.reviewed_at >= today).scalar() or 0
 
-    reviews_with_time = TaggingReview.query.filter(
-        TaggingReview.time_spent.isnot(None),
-        TaggingReview.reviewed_at >= today
-    ).all()
+        reviews_with_time = TaggingReview.query\
+            .filter(TaggingReview.time_spent.isnot(None), TaggingReview.reviewed_at >= today).all()
 
-    avg_time = 0
-    if reviews_with_time:
-        total_time = sum(review.time_spent for review in reviews_with_time)
-        avg_time = round(total_time / len(reviews_with_time), 1)
+        if reviews_with_time:
+            total_time = sum((getattr(r, 'time_spent', 0) or 0) for r in reviews_with_time)
+            avg_time = round(total_time / len(reviews_with_time), 1) if len(reviews_with_time) else 0
+        else:
+            avg_time = 0
 
-    return jsonify({'daily_reviews': daily_reviews, 'avg_review_time': avg_time})
+        return jsonify({'daily_reviews': daily_reviews, 'avg_review_time': avg_time})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': 'server_error', 'details': str(e)}), 500
 
+# ========== إحصائيات المحكّمين ==========
 @tagging_bp.route('/reviewer-stats', methods=['GET'])
 def get_reviewer_stats():
-    if 'user_id' not in session:
-        return jsonify({'error': 'غير مصرح بالوصول'}), 401
+    try:
+        if 'user_id' not in session:
+            return jsonify({'error': 'unauthorized'}), 401
 
-    user = User.query.get(session['user_id'])
-    if user.user_type != 'admin':
-        return jsonify({'error': 'صلاحيات غير كافية'}), 403
+        user = User.query.get(session['user_id'])
+        if not user or (user.user_type or '').lower() != 'admin':
+            return jsonify({'error': 'forbidden'}), 403
 
-    reviewers = User.query.filter_by(user_type='reviewer').all()
-    reviewer_stats = []
-    for reviewer in reviewers:
-        total_reviews = TaggingReview.query.filter_by(reviewer_id=reviewer.id).count()
-        approved_reviews = TaggingReview.query.filter_by(reviewer_id=reviewer.id, decision='approve').count()
-        approval_rate = round((approved_reviews / total_reviews) * 100, 1) if total_reviews > 0 else 0
-        reviewer_stats.append({
-            'username': reviewer.username,
-            'review_count': total_reviews,
-            'approval_rate': approval_rate
-        })
+        reviewers = User.query.filter_by(user_type='reviewer').all()
+        out = []
+        for r in reviewers:
+            rid = getattr(r, 'id', None)
+            total = db.session.query(func.count(TaggingReview.id))\
+                .filter(TaggingReview.reviewer_id == rid).scalar() or 0
+            ok = db.session.query(func.count(TaggingReview.id))\
+                .filter(TaggingReview.reviewer_id == rid, TaggingReview.decision == 'approve').scalar() or 0
+            rate = round((ok / total) * 100, 1) if total > 0 else 0
+            out.append({'username': getattr(r, 'username', None), 'review_count': total, 'approval_rate': rate})
 
-    reviewer_stats.sort(key=lambda x: x['review_count'], reverse=True)
-    return jsonify(reviewer_stats)
+        out.sort(key=lambda x: x['review_count'], reverse=True)
+        return jsonify(out)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': 'server_error', 'details': str(e)}), 500
