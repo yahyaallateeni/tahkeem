@@ -1,17 +1,9 @@
-/* =========================
-   أدوات عامة للتعامل مع الـ fetch
-   ========================= */
-
-// قراءة JSON بأمان حتى لو الخادم رجّع نص HTML عند الخطأ
+/* ========= أدوات مساعدة ========= */
 async function readJsonSafe(res) {
   const ct = res.headers.get('content-type') || '';
-  if (ct.includes('application/json')) {
-    try { return await res.json(); } catch (_) { /* ignore */ }
-  }
+  if (ct.includes('application/json')) { try { return await res.json(); } catch (_) {} }
   return { error: await res.text() };
 }
-
-// طلب JSON مع فحص الأخطاء وتطبيع النتيجة
 async function fetchJson(url, opts = {}) {
   const res = await fetch(url, { credentials: 'include', ...opts });
   const data = await readJsonSafe(res);
@@ -22,81 +14,47 @@ async function fetchJson(url, opts = {}) {
   return data;
 }
 
-/* =========================
-   رفع ملفات (Excel فقط)
-   ========================= */
-
-async function handleUpload() {
+/* ========= رفع ملف (Excel فقط) ========= */
+async function handleUpload(e) {
+  if (e) e.preventDefault();
   const input = document.getElementById('csvFile');
   const file = input?.files?.[0];
-
-  if (!file) {
-    alert('اختر ملفاً أولاً');
-    return;
-  }
-
-  // سماح بإكسل فقط
-  if (!/\.(xlsx|xls)$/i.test(file.name)) {
-    alert('يرجى اختيار ملف Excel بامتداد xlsx أو xls');
-    return;
-  }
+  if (!file) { alert('اختر ملفاً أولاً'); return; }
+  if (!/\.(xlsx|xls)$/i.test(file.name)) { alert('يرجى اختيار ملف Excel بامتداد xlsx أو xls'); return; }
 
   const fd = new FormData();
   fd.append('file', file);
 
   try {
-    const data = await fetchJson('/api/tagging/upload-csv', {
-      method: 'POST',
-      body: fd
-      // ملاحظة: لا تحدد Content-Type مع FormData
-    });
-
+    const data = await fetchJson('/api/tagging/upload-csv', { method: 'POST', body: fd });
     alert(data?.message || 'تم الرفع بنجاح');
-    // حدّث قائمة الجلسات بعد نجاح الرفع
     loadUploadSessions();
-
   } catch (err) {
     console.error('خطأ في رفع الملف:', err);
     alert('تعذّر الرفع: ' + err.message);
   }
 }
 
-/* =========================
-   تحميل جلسات الرفع (مع تطبيع)
-   ========================= */
-
+/* ========= جلسات الرفع ========= */
 async function loadUploadSessions() {
   try {
     const raw = await fetchJson('/api/tagging/upload-sessions');
-
-    // تطبيع الاستجابة إلى مصفوفة دائمًا
     const sessions = Array.isArray(raw)
       ? raw
       : (Array.isArray(raw?.sessions) ? raw.sessions
         : (Array.isArray(raw?.data) ? raw.data : []));
-
-    if (!Array.isArray(sessions)) {
-      throw new Error('Unexpected response shape for /upload-sessions');
-    }
-
-    const latest = sessions.slice(0, 10);
-    renderUploadSessions(latest);
-
+    if (!Array.isArray(sessions)) throw new Error('Unexpected response for /upload-sessions');
+    renderUploadSessions(sessions.slice(0, 10));
   } catch (err) {
     console.error('خطأ في تحميل جلسات الرفع:', err);
     const box = document.getElementById('uploadSessionsBox');
     if (box) box.textContent = 'تعذّر تحميل جلسات الرفع';
   }
 }
-
-// Renderer افتراضي بسيط إن لم يكن لديك Renderer خاص
 function renderUploadSessions(list) {
   const box = document.getElementById('uploadSessionsBox');
   if (!box) return;
-  if (!Array.isArray(list) || list.length === 0) {
-    box.textContent = 'لا توجد جلسات رفع بعد.';
-    return;
-  }
+  if (!Array.isArray(list) || list.length === 0) { box.textContent = 'لا توجد جلسات رفع بعد.'; return; }
   box.innerHTML = list.map(s => {
     const name = s.filename || s.name || 'ملف';
     const st = s.status || 'غير معروف';
@@ -113,49 +71,32 @@ function renderUploadSessions(list) {
   }).join('');
 }
 
-/* =========================
-   لوحات وإحصائيات (آمن ضد الأخطاء)
-   ========================= */
-
+/* ========= إحصائيات ولوحات ========= */
 async function loadDashboardStats() {
   try {
     const stats = await fetchJson('/api/tagging/stats');
-    // عناصر اختيارية؛ لن نكسر الصفحة إن لم توجد
     const id = (x) => document.getElementById(x);
-
-    if (id('totalData'))        id('totalData').textContent        = stats.total_data ?? '0';
-    if (id('pendingData'))      id('pendingData').textContent      = stats.pending_data ?? '0';
-    if (id('reviewedData'))     id('reviewedData').textContent     = stats.reviewed_data ?? '0';
-    if (id('approvedData'))     id('approvedData').textContent     = stats.approved_data ?? '0';
-    if (id('completionRate'))   id('completionRate').textContent   = (stats.completion_rate ?? 0) + '%';
-  } catch (err) {
-    console.error('خطأ في تحميل الإحصائيات العامة:', err);
-  }
+    if (id('totalData'))      id('totalData').textContent      = stats.total_data ?? '0';
+    if (id('pendingData'))    id('pendingData').textContent    = stats.pending_data ?? '0';
+    if (id('reviewedData'))   id('reviewedData').textContent   = stats.reviewed_data ?? '0';
+    if (id('approvedData'))   id('approvedData').textContent   = stats.approved_data ?? '0';
+    if (id('completionRate')) id('completionRate').textContent = (stats.completion_rate ?? 0) + '%';
+  } catch (err) { console.error('خطأ في تحميل الإحصائيات العامة:', err); }
 }
-
 async function loadDailyStats() {
   try {
     const daily = await fetchJson('/api/tagging/daily-stats');
     const id = (x) => document.getElementById(x);
-
-    if (id('dailyReviews'))     id('dailyReviews').textContent     = daily.daily_reviews ?? '0';
-    if (id('avgReviewTime'))    id('avgReviewTime').textContent    = (daily.avg_review_time ?? 0) + ' ثانية';
-  } catch (err) {
-    console.error('خطأ في تحميل الإحصائيات اليومية:', err);
-  }
+    if (id('dailyReviews'))  id('dailyReviews').textContent  = daily.daily_reviews ?? '0';
+    if (id('avgReviewTime')) id('avgReviewTime').textContent = (daily.avg_review_time ?? 0) + ' ثانية';
+  } catch (err) { console.error('خطأ في تحميل الإحصائيات اليومية:', err); }
 }
-
 async function loadReviewerStats() {
   try {
     const list = await fetchJson('/api/tagging/reviewer-stats');
     const box = document.getElementById('reviewersStatsBox');
     if (!box) return;
-
-    if (!Array.isArray(list) || list.length === 0) {
-      box.textContent = 'لا توجد بيانات محكّمين بعد.';
-      return;
-    }
-
+    if (!Array.isArray(list) || list.length === 0) { box.textContent = 'لا توجد بيانات محكّمين بعد.'; return; }
     box.innerHTML = list.map(r => `
       <div class="reviewer-row">
         <div>${r.username || '-'}</div>
@@ -163,23 +104,15 @@ async function loadReviewerStats() {
         <div>نسبة القبول: ${(r.approval_rate ?? 0)}%</div>
       </div>
     `).join('');
-  } catch (err) {
-    console.error('خطأ في تحميل إحصائيات المحكّمين:', err);
-  }
+  } catch (err) { console.error('خطأ في تحميل إحصائيات المحكّمين:', err); }
 }
-
 async function loadUsers() {
   try {
-    const raw = await fetchJson('/api/users'); // يتطلب جلسة آدمن
+    const raw = await fetchJson('/api/users');
     const users = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
     const box = document.getElementById('usersBox');
     if (!box) return;
-
-    if (users.length === 0) {
-      box.textContent = 'لا يوجد مستخدمون.';
-      return;
-    }
-
+    if (users.length === 0) { box.textContent = 'لا يوجد مستخدمون.'; return; }
     box.innerHTML = users.map(u => `
       <div class="user-row">
         <div>${u.username || '-'}</div>
@@ -194,18 +127,13 @@ async function loadUsers() {
   }
 }
 
-/* =========================
-   تهيئة الصفحة
-   ========================= */
-
+/* ========= تهيئة ========= */
 document.addEventListener('DOMContentLoaded', () => {
-  // ربط زر الرفع
-  document.getElementById('uploadBtn')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    handleUpload();
-  });
+  // زر وفورم الرفع
+  document.getElementById('uploadBtn')?.addEventListener('click', handleUpload);
+  document.getElementById('uploadForm')?.addEventListener('submit', handleUpload);
 
-  // تحميل البيانات الأولية (لن تكسر الصفحة إن لم توجد العناصر)
+  // تحميل البيانات الأولية
   loadDashboardStats();
   loadDailyStats();
   loadReviewerStats();
