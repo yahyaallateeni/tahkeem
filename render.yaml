@@ -12,8 +12,3 @@ services:
     buildCommand: "pip install --no-cache-dir -r requirements.txt"
     # أمر التشغيل
     startCommand: "gunicorn src.main:app"
-    # متغيرات البيئة
-    envVars:
-      - key: SQLALCHEMY_DATABASE_URI
-        # هذا هو عنوان قاعدة البيانات الفعلي الخاص بك
-        value: "postgresql://admin:Js1JGYuYdrsapR0L0asAAvGSB71sYZ53@dpg-d2bpvfbe5dus738g1je0-a/tahkeemdb"
