@@ -3,7 +3,7 @@ import sys
 import subprocess
 from flask import Flask, send_from_directory
 from flask_cors import CORS
-from src.models.user import db
+from src.models.user import db, User
 from src.models.tagging import TaggingData, TaggingReview, UploadSession
 from src.routes.user import user_bp
 from src.routes.tagging import tagging_bp
@@ -21,14 +21,16 @@ CORS(app, supports_credentials=True)
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(tagging_bp, url_prefix='/api/tagging')
 
+# =========================
 # Database configuration
+# =========================
 # Read from SQLALCHEMY_DATABASE_URI first (as set in Render), then from DATABASE_URL as fallback.
 db_uri = os.getenv('SQLALCHEMY_DATABASE_URI') or os.getenv('DATABASE_URL')
 
 if not db_uri:
     raise RuntimeError("SQLALCHEMY_DATABASE_URI is not set in the environment.")
 
-# Compatibility fix: change postgres:// to postgresql://
+# Compatibility: Heroku-style URLs sometimes use postgres://
 if db_uri.startswith('postgres://'):
     db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
 
@@ -42,19 +44,32 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Initialize the database with the Flask app.
 db.init_app(app)
 
-# --- START OF MOVED CODE ---
+# --- AUTO DB INIT & ADMIN CREATION ---
+from werkzeug.security import generate_password_hash
 with app.app_context():
-    # This will create all the database tables in the PostgreSQL database.
-    db.create_all()
-
-    # This temporary code runs the create_admin.py script to set up the admin user.
-    print("Running create_admin.py script...")
+    # Create tables if they don't exist
     try:
-        subprocess.run(['python', 'src/create_admin.py'], check=True, cwd=os.path.dirname(__file__))
-        print("create_admin.py script finished.")
-    except subprocess.CalledProcessError as e:
-        print(f"Error running create_admin.py: {e}")
-# --- END OF MOVED CODE ---
+        db.create_all()
+    except Exception as e:
+        print("DB init error:", e)
+
+    # Create default admin user if missing
+    try:
+        admin_user = User.query.filter_by(username='admin').first()
+        if not admin_user:
+            admin_user = User(
+                username='admin',
+                password=generate_password_hash('admin123'),
+                role='admin'
+            )
+            db.session.add(admin_user)
+            db.session.commit()
+            print("Admin user created with username=admin and password=admin123")
+        else:
+            print("Admin user already exists.")
+    except Exception as e:
+        print("Admin creation error:", e)
+# --- END AUTO SETUP ---
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -77,4 +92,5 @@ def serve(path):
 
 # Main entry point for the application.
 if __name__ == '__main__':
+    # Starts the Flask development server.
     app.run(host='0.0.0.0', port=5000, debug=True)
