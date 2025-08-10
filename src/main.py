@@ -22,31 +22,39 @@ app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(tagging_bp, url_prefix='/api/tagging')
 
 # Database configuration
-# This now gets the database connection string from the environment variable set on Render.
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+# Read from SQLALCHEMY_DATABASE_URI first (as set in Render), then from DATABASE_URL as fallback.
+db_uri = os.getenv('SQLALCHEMY_DATABASE_URI') or os.getenv('DATABASE_URL')
+
+if not db_uri:
+    raise RuntimeError("SQLALCHEMY_DATABASE_URI is not set in the environment.")
+
+# Compatibility fix: change postgres:// to postgresql://
+if db_uri.startswith('postgres://'):
+    db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
+
+# Add sslmode=require if connecting externally and not specified already
+if 'sslmode=' not in db_uri and 'localhost' not in db_uri:
+    db_uri += ('&' if '?' in db_uri else '?') + 'sslmode=require'
+
+app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize the database with the Flask app.
 db.init_app(app)
 
 # --- START OF MOVED CODE ---
-# This block is now outside the if __name__ == '__main__':
-# so it runs every time the application starts on Render.
 with app.app_context():
     # This will create all the database tables in the PostgreSQL database.
     db.create_all()
 
     # This temporary code runs the create_admin.py script to set up the admin user.
-    # It's important to run this after db.create_all() to ensure the tables exist.
     print("Running create_admin.py script...")
     try:
-        # تأكد من أن المسار صحيح إذا كان ملف create_admin.py في مكان آخر
         subprocess.run(['python', 'src/create_admin.py'], check=True, cwd=os.path.dirname(__file__))
         print("create_admin.py script finished.")
     except subprocess.CalledProcessError as e:
         print(f"Error running create_admin.py: {e}")
 # --- END OF MOVED CODE ---
-
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -69,5 +77,4 @@ def serve(path):
 
 # Main entry point for the application.
 if __name__ == '__main__':
-    # Starts the Flask development server.
     app.run(host='0.0.0.0', port=5000, debug=True)
