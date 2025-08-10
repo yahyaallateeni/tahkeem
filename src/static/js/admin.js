@@ -1,26 +1,23 @@
-/* ========= أدوات مساعدة ========= */
+// ===== أدوات بسيطة =====
 async function readJsonSafe(res) {
   const ct = res.headers.get('content-type') || '';
-  if (ct.includes('application/json')) { try { return await res.json(); } catch (_) {} }
+  if (ct.includes('application/json')) { try { return await res.json(); } catch {} }
   return { error: await res.text() };
 }
 async function fetchJson(url, opts = {}) {
   const res = await fetch(url, { credentials: 'include', ...opts });
   const data = await readJsonSafe(res);
-  if (!res.ok) {
-    const msg = data?.error || data?.detail || data?.message || `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
+  if (!res.ok) throw new Error(data?.error || data?.detail || data?.message || `HTTP ${res.status}`);
   return data;
 }
 
-/* ========= رفع ملف (Excel فقط) ========= */
+// ===== رفع ملف Excel فقط =====
 async function handleUpload(e) {
   if (e) e.preventDefault();
   const input = document.getElementById('csvFile');
   const file = input?.files?.[0];
   if (!file) { alert('اختر ملفاً أولاً'); return; }
-  if (!/\.(xlsx|xls)$/i.test(file.name)) { alert('يرجى اختيار ملف Excel بامتداد xlsx أو xls'); return; }
+  if (!/\.(xlsx|xls)$/i.test(file.name)) { alert('اختر ملف Excel (xlsx/xls)'); return; }
 
   const fd = new FormData();
   fd.append('file', file);
@@ -30,23 +27,19 @@ async function handleUpload(e) {
     alert(data?.message || 'تم الرفع بنجاح');
     loadUploadSessions();
   } catch (err) {
-    console.error('خطأ في رفع الملف:', err);
     alert('تعذّر الرفع: ' + err.message);
   }
 }
 
-/* ========= جلسات الرفع ========= */
+// ===== جلسات الرفع (تصحيح .slice) =====
 async function loadUploadSessions() {
   try {
     const raw = await fetchJson('/api/tagging/upload-sessions');
-    const sessions = Array.isArray(raw)
-      ? raw
-      : (Array.isArray(raw?.sessions) ? raw.sessions
-        : (Array.isArray(raw?.data) ? raw.data : []));
-    if (!Array.isArray(sessions)) throw new Error('Unexpected response for /upload-sessions');
+    const sessions = Array.isArray(raw) ? raw
+                   : Array.isArray(raw?.sessions) ? raw.sessions
+                   : Array.isArray(raw?.data) ? raw.data : [];
     renderUploadSessions(sessions.slice(0, 10));
-  } catch (err) {
-    console.error('خطأ في تحميل جلسات الرفع:', err);
+  } catch {
     const box = document.getElementById('uploadSessionsBox');
     if (box) box.textContent = 'تعذّر تحميل جلسات الرفع';
   }
@@ -71,25 +64,25 @@ function renderUploadSessions(list) {
   }).join('');
 }
 
-/* ========= إحصائيات ولوحات ========= */
+// ===== إحصائيات ولوحات =====
 async function loadDashboardStats() {
   try {
-    const stats = await fetchJson('/api/tagging/stats');
+    const s = await fetchJson('/api/tagging/stats');
     const id = (x) => document.getElementById(x);
-    if (id('totalData'))      id('totalData').textContent      = stats.total_data ?? '0';
-    if (id('pendingData'))    id('pendingData').textContent    = stats.pending_data ?? '0';
-    if (id('reviewedData'))   id('reviewedData').textContent   = stats.reviewed_data ?? '0';
-    if (id('approvedData'))   id('approvedData').textContent   = stats.approved_data ?? '0';
-    if (id('completionRate')) id('completionRate').textContent = (stats.completion_rate ?? 0) + '%';
-  } catch (err) { console.error('خطأ في تحميل الإحصائيات العامة:', err); }
+    if (id('totalData'))      id('totalData').textContent      = s.total_data ?? '0';
+    if (id('pendingData'))    id('pendingData').textContent    = s.pending_data ?? '0';
+    if (id('reviewedData'))   id('reviewedData').textContent   = s.reviewed_data ?? '0';
+    if (id('approvedData'))   id('approvedData').textContent   = s.approved_data ?? '0';
+    if (id('completionRate')) id('completionRate').textContent = (s.completion_rate ?? 0) + '%';
+  } catch {}
 }
 async function loadDailyStats() {
   try {
-    const daily = await fetchJson('/api/tagging/daily-stats');
+    const d = await fetchJson('/api/tagging/daily-stats');
     const id = (x) => document.getElementById(x);
-    if (id('dailyReviews'))  id('dailyReviews').textContent  = daily.daily_reviews ?? '0';
-    if (id('avgReviewTime')) id('avgReviewTime').textContent = (daily.avg_review_time ?? 0) + ' ثانية';
-  } catch (err) { console.error('خطأ في تحميل الإحصائيات اليومية:', err); }
+    if (id('dailyReviews'))  id('dailyReviews').textContent  = d.daily_reviews ?? '0';
+    if (id('avgReviewTime')) id('avgReviewTime').textContent = (d.avg_review_time ?? 0) + ' ثانية';
+  } catch {}
 }
 async function loadReviewerStats() {
   try {
@@ -104,7 +97,7 @@ async function loadReviewerStats() {
         <div>نسبة القبول: ${(r.approval_rate ?? 0)}%</div>
       </div>
     `).join('');
-  } catch (err) { console.error('خطأ في تحميل إحصائيات المحكّمين:', err); }
+  } catch {}
 }
 async function loadUsers() {
   try {
@@ -120,23 +113,20 @@ async function loadUsers() {
         <div>${u.user_type || '-'}</div>
       </div>
     `).join('');
-  } catch (err) {
-    console.error('خطأ في تحميل المستخدمين:', err);
+  } catch {
     const box = document.getElementById('usersBox');
     if (box) box.textContent = 'تعذّر تحميل المستخدمين';
   }
 }
 
-/* ========= تهيئة ========= */
+// ===== تهيئة =====
 document.addEventListener('DOMContentLoaded', () => {
-  // زر وفورم الرفع
-  document.getElementById('uploadBtn')?.addEventListener('click', handleUpload);
-  document.getElementById('uploadForm')?.addEventListener('submit', handleUpload);
+  document.getElementById('uploadBtn')?.addEventListener('click', handleUpload)
+  document.getElementById('uploadForm')?.addEventListener('submit', handleUpload)
 
-  // تحميل البيانات الأولية
-  loadDashboardStats();
-  loadDailyStats();
-  loadReviewerStats();
-  loadUsers();
-  loadUploadSessions();
-});
+  loadDashboardStats()
+  loadDailyStats()
+  loadReviewerStats()
+  loadUsers()
+  loadUploadSessions()
+})
