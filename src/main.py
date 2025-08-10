@@ -10,7 +10,6 @@ from src.models.user import db, User
 from src.models.tagging import TaggingData, TaggingReview, UploadSession
 from src.routes.user import user_bp
 from src.routes.tagging import tagging_bp
-from werkzeug.security import generate_password_hash
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'tagging-platform-secret-key-2024-final'
@@ -43,7 +42,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # تهيئة قاعدة البيانات
 db.init_app(app)
 
-# --- إنشاء الجداول والأدمن تلقائياً ---
+# --- إنشاء الجداول والأدمن تلقائياً باستخدام set_password ---
 with app.app_context():
     # إنشاء الجداول
     try:
@@ -51,43 +50,48 @@ with app.app_context():
     except Exception as e:
         print("DB init error:", e)
 
-    # إنشاء / تحديث مستخدم admin
+    # إنشاء / تحديث مستخدم admin بكلمة مرور مُجزّأة
     try:
         admin = User.query.filter_by(username='admin').first()
-        cols = User.__table__.columns.keys()
-
         if not admin:
-            admin = User()
-            admin.username = 'admin'
+            admin = User(username='admin')
+            # لو عندك حقل نوع المستخدم/الدور
+            if 'user_type' in User.__table__.columns.keys():
+                setattr(admin, 'user_type', 'admin')
+            elif 'role' in User.__table__.columns.keys():
+                setattr(admin, 'role', 'admin')
 
-            # خزّن الهاش إن وُجد عمود password_hash
-            if 'password_hash' in cols:
-                admin.password_hash = generate_password_hash('admin123')
-
-            # خزّن نصّيًا إن وُجد عمود password
-            if 'password' in cols:
-                admin.password = 'admin123'
-
-            # (اختياري) دور
-            if 'role' in cols:
-                admin.role = 'admin'
+            # استخدم set_password لضمان التوافق مع check_password
+            if hasattr(admin, 'set_password') and callable(getattr(admin, 'set_password')):
+                admin.set_password('admin123')
+            else:
+                # احتياط نادر جداً: لو ما فيه set_password
+                from werkzeug.security import generate_password_hash
+                cols = User.__table__.columns.keys()
+                if 'password_hash' in cols:
+                    setattr(admin, 'password_hash', generate_password_hash('admin123'))
+                elif 'password' in cols:
+                    setattr(admin, 'password', 'admin123')
+                else:
+                    raise RuntimeError("No password field found on User model.")
 
             db.session.add(admin)
             db.session.commit()
             print("Admin created: username=admin, password=admin123")
         else:
-            # لو المستخدم موجود لكن الحقول ناقصة، كمّلها
-            updated = False
-            if 'password_hash' in cols and not getattr(admin, 'password_hash', None):
-                admin.password_hash = generate_password_hash('admin123')
-                updated = True
-            if 'password' in cols and not getattr(admin, 'password', None):
-                admin.password = 'admin123'
-                updated = True
-            if 'role' in cols and not getattr(admin, 'role', None):
+            # لو موجود، تأكد أن له كلمة مرور صالحة
+            needs_commit = False
+            if hasattr(admin, 'password_hash') and not getattr(admin, 'password_hash', None):
+                if hasattr(admin, 'set_password'):
+                    admin.set_password('admin123')
+                    needs_commit = True
+            if 'user_type' in User.__table__.columns.keys() and not getattr(admin, 'user_type', None):
+                admin.user_type = 'admin'
+                needs_commit = True
+            if 'role' in User.__table__.columns.keys() and not getattr(admin, 'role', None):
                 admin.role = 'admin'
-                updated = True
-            if updated:
+                needs_commit = True
+            if needs_commit:
                 db.session.commit()
                 print("Admin fields updated.")
             else:
