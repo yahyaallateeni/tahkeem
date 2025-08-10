@@ -2,22 +2,23 @@ import os
 import sys
 from flask import Flask, send_from_directory
 from flask_cors import CORS
+
+# ضَع تعديل المسار قبل استيرادات src.*
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
 from src.models.user import db, User
 from src.models.tagging import TaggingData, TaggingReview, UploadSession
 from src.routes.user import user_bp
 from src.routes.tagging import tagging_bp
 from werkzeug.security import generate_password_hash
 
-# Ensure project structure path is loaded before imports from src.*
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'tagging-platform-secret-key-2024-final'
 
-# Enable CORS for all routes to allow connections from different domains.
+# CORS
 CORS(app, supports_credentials=True)
 
-# Register blueprints to organize your routes.
+# Blueprints
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(tagging_bp, url_prefix='/api/tagging')
 
@@ -27,64 +28,79 @@ app.register_blueprint(tagging_bp, url_prefix='/api/tagging')
 db_uri = os.getenv('SQLALCHEMY_DATABASE_URI') or os.getenv('DATABASE_URL')
 if not db_uri:
     raise RuntimeError("SQLALCHEMY_DATABASE_URI is not set in the environment.")
+
+# توافق لمسارات قديمة
 if db_uri.startswith('postgres://'):
     db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
+
+# SSL عند الاتصال الخارجي
 if 'sslmode=' not in db_uri and 'localhost' not in db_uri:
     db_uri += ('&' if '?' in db_uri else '?') + 'sslmode=require'
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Initialize the database with the Flask app.
+# تهيئة قاعدة البيانات
 db.init_app(app)
 
-# --- AUTO DB INIT & FLEXIBLE ADMIN CREATION ---
+# --- إنشاء الجداول والأدمن تلقائياً ---
 with app.app_context():
-    # Create tables if they don't exist
+    # إنشاء الجداول
     try:
         db.create_all()
     except Exception as e:
         print("DB init error:", e)
 
+    # إنشاء / تحديث مستخدم admin
     try:
-        # If admin user doesn't exist, create one
         admin = User.query.filter_by(username='admin').first()
+        cols = User.__table__.columns.keys()
+
         if not admin:
             admin = User()
-            # Mandatory username
-            setattr(admin, 'username', 'admin')
+            admin.username = 'admin'
 
-            # Decide where to store the password:
-            # 1) If model has password_hash column -> store hashed
-            if 'password_hash' in getattr(User, '__table__').columns:
-                setattr(admin, 'password_hash', generate_password_hash('admin123'))
-            # 2) Else if model has password column -> store plaintext
-            elif 'password' in getattr(User, '__table__').columns:
-                setattr(admin, 'password', 'admin123')
-            else:
-                # No known password field; fail gracefully with a clear log
-                raise RuntimeError(
-                    "User model has neither 'password_hash' nor 'password' column."
-                )
+            # خزّن الهاش إن وُجد عمود password_hash
+            if 'password_hash' in cols:
+                admin.password_hash = generate_password_hash('admin123')
 
-            # Optional role if exists
-            if 'role' in getattr(User, '__table__').columns:
-                setattr(admin, 'role', 'admin')
+            # خزّن نصّيًا إن وُجد عمود password
+            if 'password' in cols:
+                admin.password = 'admin123'
+
+            # (اختياري) دور
+            if 'role' in cols:
+                admin.role = 'admin'
 
             db.session.add(admin)
             db.session.commit()
-            print("Admin user created: username=admin, password=admin123")
+            print("Admin created: username=admin, password=admin123")
         else:
-            print("Admin user already exists.")
+            # لو المستخدم موجود لكن الحقول ناقصة، كمّلها
+            updated = False
+            if 'password_hash' in cols and not getattr(admin, 'password_hash', None):
+                admin.password_hash = generate_password_hash('admin123')
+                updated = True
+            if 'password' in cols and not getattr(admin, 'password', None):
+                admin.password = 'admin123'
+                updated = True
+            if 'role' in cols and not getattr(admin, 'role', None):
+                admin.role = 'admin'
+                updated = True
+            if updated:
+                db.session.commit()
+                print("Admin fields updated.")
+            else:
+                print("Admin user already exists.")
     except Exception as e:
         print("Admin creation error:", e)
-# --- END AUTO SETUP ---
+# --- نهاية الإعداد التلقائي ---
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
     """
-    Serves the static files and the main index.html for the single-page application.
+    يقدم ملفات الواجهة الثابتة و index.html لتطبيق SPA.
     """
     static_folder_path = app.static_folder
     if static_folder_path is None:
@@ -99,6 +115,5 @@ def serve(path):
         else:
             return "index.html not found", 404
 
-# Main entry point for local development.
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
