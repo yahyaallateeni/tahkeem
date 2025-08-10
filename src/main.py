@@ -1,14 +1,14 @@
 import os
 import sys
-import subprocess
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 from src.models.user import db, User
 from src.models.tagging import TaggingData, TaggingReview, UploadSession
 from src.routes.user import user_bp
 from src.routes.tagging import tagging_bp
+from werkzeug.security import generate_password_hash
 
-# This is an important step to ensure the project structure is correctly handled.
+# Ensure project structure path is loaded before imports from src.*
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
@@ -24,17 +24,11 @@ app.register_blueprint(tagging_bp, url_prefix='/api/tagging')
 # =========================
 # Database configuration
 # =========================
-# Read from SQLALCHEMY_DATABASE_URI first (as set in Render), then from DATABASE_URL as fallback.
 db_uri = os.getenv('SQLALCHEMY_DATABASE_URI') or os.getenv('DATABASE_URL')
-
 if not db_uri:
     raise RuntimeError("SQLALCHEMY_DATABASE_URI is not set in the environment.")
-
-# Compatibility: Heroku-style URLs sometimes use postgres://
 if db_uri.startswith('postgres://'):
     db_uri = db_uri.replace('postgres://', 'postgresql://', 1)
-
-# Add sslmode=require if connecting externally and not specified already
 if 'sslmode=' not in db_uri and 'localhost' not in db_uri:
     db_uri += ('&' if '?' in db_uri else '?') + 'sslmode=require'
 
@@ -44,8 +38,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Initialize the database with the Flask app.
 db.init_app(app)
 
-# --- AUTO DB INIT & ADMIN CREATION ---
-from werkzeug.security import generate_password_hash
+# --- AUTO DB INIT & FLEXIBLE ADMIN CREATION ---
 with app.app_context():
     # Create tables if they don't exist
     try:
@@ -53,18 +46,34 @@ with app.app_context():
     except Exception as e:
         print("DB init error:", e)
 
-    # Create default admin user if missing
     try:
-        admin_user = User.query.filter_by(username='admin').first()
-        if not admin_user:
-            admin_user = User(
-                username='admin',
-                password=generate_password_hash('admin123'),
-                role='admin'
-            )
-            db.session.add(admin_user)
+        # If admin user doesn't exist, create one
+        admin = User.query.filter_by(username='admin').first()
+        if not admin:
+            admin = User()
+            # Mandatory username
+            setattr(admin, 'username', 'admin')
+
+            # Decide where to store the password:
+            # 1) If model has password_hash column -> store hashed
+            if 'password_hash' in getattr(User, '__table__').columns:
+                setattr(admin, 'password_hash', generate_password_hash('admin123'))
+            # 2) Else if model has password column -> store plaintext
+            elif 'password' in getattr(User, '__table__').columns:
+                setattr(admin, 'password', 'admin123')
+            else:
+                # No known password field; fail gracefully with a clear log
+                raise RuntimeError(
+                    "User model has neither 'password_hash' nor 'password' column."
+                )
+
+            # Optional role if exists
+            if 'role' in getattr(User, '__table__').columns:
+                setattr(admin, 'role', 'admin')
+
+            db.session.add(admin)
             db.session.commit()
-            print("Admin user created with username=admin and password=admin123")
+            print("Admin user created: username=admin, password=admin123")
         else:
             print("Admin user already exists.")
     except Exception as e:
@@ -90,7 +99,6 @@ def serve(path):
         else:
             return "index.html not found", 404
 
-# Main entry point for the application.
+# Main entry point for local development.
 if __name__ == '__main__':
-    # Starts the Flask development server.
     app.run(host='0.0.0.0', port=5000, debug=True)
