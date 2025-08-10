@@ -42,36 +42,51 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # تهيئة قاعدة البيانات
 db.init_app(app)
 
-# --- إنشاء الجداول والأدمن تلقائياً باستخدام set_password ---
+# --- إعداد تلقائي: ترقية العمود وإنشاء أدمن ---
 with app.app_context():
-    # إنشاء الجداول
+    # 1) إنشاء الجداول إن لم توجد
     try:
         db.create_all()
     except Exception as e:
         print("DB init error:", e)
 
-    # إنشاء / تحديث مستخدم admin بكلمة مرور مُجزّأة
+    # 2) ترقية طول عمود password_hash إلى 255 لتفادي تقصير النص
     try:
+        from sqlalchemy import text
+        with db.engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE users "
+                "ALTER COLUMN password_hash TYPE VARCHAR(255)"
+            ))
+            # ملاحظة: لو العمود أصلاً 255 أو Text فالأمر قد يرمي خطأ بسيط؛ نتجاهله بالكتش التالي
+        print("password_hash column ensured to VARCHAR(255).")
+    except Exception as e:
+        print("Skip/ignore password_hash alter (maybe already large enough):", e)
+
+    # 3) إنشاء/تحديث مستخدم admin بكلمة مرور مُجزّأة
+    try:
+        cols = User.__table__.columns.keys()
         admin = User.query.filter_by(username='admin').first()
+
         if not admin:
             admin = User(username='admin')
-            # لو عندك حقل نوع المستخدم/الدور
-            if 'user_type' in User.__table__.columns.keys():
-                setattr(admin, 'user_type', 'admin')
-            elif 'role' in User.__table__.columns.keys():
-                setattr(admin, 'role', 'admin')
 
-            # استخدم set_password لضمان التوافق مع check_password
+            # نوع المستخدم إن وُجد
+            if 'user_type' in cols:
+                admin.user_type = 'admin'
+            elif 'role' in cols:
+                admin.role = 'admin'
+
+            # استخدم set_password إن توفّر
             if hasattr(admin, 'set_password') and callable(getattr(admin, 'set_password')):
                 admin.set_password('admin123')
             else:
-                # احتياط نادر جداً: لو ما فيه set_password
+                # احتياطي: خزن بالـ hash في password_hash أو نصيًا في password حسب الأعمدة
                 from werkzeug.security import generate_password_hash
-                cols = User.__table__.columns.keys()
                 if 'password_hash' in cols:
-                    setattr(admin, 'password_hash', generate_password_hash('admin123'))
+                    admin.password_hash = generate_password_hash('admin123')
                 elif 'password' in cols:
-                    setattr(admin, 'password', 'admin123')
+                    admin.password = 'admin123'
                 else:
                     raise RuntimeError("No password field found on User model.")
 
@@ -79,23 +94,21 @@ with app.app_context():
             db.session.commit()
             print("Admin created: username=admin, password=admin123")
         else:
-            # لو موجود، تأكد أن له كلمة مرور صالحة
             needs_commit = False
+            # تأكد من تعيين الدور
+            if 'user_type' in cols and (getattr(admin, 'user_type', None) or '').lower() != 'admin':
+                admin.user_type = 'admin'; needs_commit = True
+            if 'role' in cols and (getattr(admin, 'role', None) or '').lower() != 'admin':
+                admin.role = 'admin'; needs_commit = True
+            # تأكد من وجود كلمة مرور مُهيأة
             if hasattr(admin, 'password_hash') and not getattr(admin, 'password_hash', None):
-                if hasattr(admin, 'set_password'):
-                    admin.set_password('admin123')
-                    needs_commit = True
-            if 'user_type' in User.__table__.columns.keys() and not getattr(admin, 'user_type', None):
-                admin.user_type = 'admin'
-                needs_commit = True
-            if 'role' in User.__table__.columns.keys() and not getattr(admin, 'role', None):
-                admin.role = 'admin'
-                needs_commit = True
+                if hasattr(admin, 'set_password') and callable(getattr(admin, 'set_password')):
+                    admin.set_password('admin123'); needs_commit = True
             if needs_commit:
                 db.session.commit()
                 print("Admin fields updated.")
             else:
-                print("Admin user already exists.")
+                print("Admin user already exists and is configured.")
     except Exception as e:
         print("Admin creation error:", e)
 # --- نهاية الإعداد التلقائي ---
