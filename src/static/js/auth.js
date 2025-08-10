@@ -1,144 +1,105 @@
-const API_BASE = '/api';
+/**
+ * auth.js
+ * -----------------------------------------------------------------------------
+ * - يضمن إرسال الكوكيز (الجلسة) مع كل طلب fetch تلقائياً.
+ * - يفرض أن استجابات مسارات الـ API فقط ترجع JSON (ويطبع HTML الخطأ إن وُجد).
+ * - يوفّر دوال مساعدة لتسجيل الدخول/الخروج والتحقق من الجلسة.
+ * -----------------------------------------------------------------------------
+ */
 
-// Initialize app
-document.addEventListener('DOMContentLoaded', function() {
-    console.log("منصة التحكيم جاهزة");
-    
-    // Initialize login form
-    initLoginForm();
-    
-    // Check if user is already logged in
-    checkExistingSession();
-});
+/* اعتراض fetch:
+   - نضيف credentials: 'include' دائماً (لتمرير كوكي الجلسة مع HTTPS على Render).
+   - نُلزم JSON فقط لمسارات تبدأ بـ /api ... حتى لا نكسر تحميل ملفات ثابتة مثل .html/.css/.js */
+(function () {
+  const originalFetch = window.fetch;
 
-// Initialize login form
-function initLoginForm() {
-    const loginForm = document.getElementById('loginForm');
-    if (loginForm) {
-        loginForm.addEventListener('submit', handleLogin);
-    }
-}
+  window.fetch = function (input, init) {
+    init = init || {};
+    if (!init.credentials) init.credentials = 'include';
 
-// Check for existing session
-async function checkExistingSession() {
-    // Only check if we're on the main login page
-    if (window.location.pathname !== '/' && window.location.pathname !== '/index.html') {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${API_BASE}/check-session`, {
-            credentials: 'include'
+    // استخرج العنوان كـ URL لفحص إن كان المسار API أم لا
+    let urlString = typeof input === 'string' ? input : (input && input.url) || '';
+    let url;
+    try { url = new URL(urlString, window.location.href); } catch { url = { pathname: urlString }; }
+
+    return originalFetch(input, init).then(async (response) => {
+      // لا نفرض JSON إلا على مسارات /api حتى لا نؤثر على الملفات الثابتة
+      const isApi = /\/api(\/|$)/.test(url.pathname || '');
+
+      if (!isApi) {
+        return response; // ملفات ثابتة وغيره تُعاد كما هي
+      }
+
+      // لمسارات API نتوقع JSON — لو عاد HTML/نص نوضح ذلك في الكونسول
+      try {
+        const data = await response.clone().json();
+        // نحافظ على حالة HTTP ونلفّ JSON المُحلّل
+        return new Response(JSON.stringify(data), {
+          status: response.status,
+          headers: response.headers
         });
-        
-        if (response.ok) {
-            const data = await response.json();
-            if (data.logged_in) {
-                // User is logged in, redirect based on type
-                if (data.user_type === 'admin') {
-                    window.location.href = '/admin.html';
-                } else if (data.user_type === 'reviewer') {
-                    window.location.href = '/reviewer.html';
-                }
-            }
-        }
-    } catch (error) {
-        // User not logged in, stay on login page
-        console.log('No existing session');
-    }
+      } catch {
+        const text = await response.clone().text();
+        console.error("⚠ استجابة غير JSON من API:", response.status, (text || '').slice(0, 600));
+        throw new Error(`Server returned non-JSON for ${url.pathname} (status ${response.status})`);
+      }
+    });
+  };
+})();
+
+/* دوال مساعدة للطلب من الـ API */
+
+// POST JSON عام يعيد {data, status}
+async function apiPostJSON(path, bodyObj) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bodyObj || {})
+  });
+  const data = await res.json();
+  return { data, status: res.status };
 }
 
-// Handle login form submission
-async function handleLogin(event) {
-    event.preventDefault();
-    
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
-    
-    if (!username || !password) {
-        showErrorMessage('يرجى إدخال اسم المستخدم وكلمة المرور');
-        return;
-    }
-    
-    showLoadingMessage(true);
-    hideErrorMessage();
-    
-    try {
-        const formData = new FormData();
-        formData.append('username', username);
-        formData.append('password', password);
-        
-        const response = await fetch(`${API_BASE}/login`, {
-            method: 'POST',
-            body: formData,
-            credentials: 'include'
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok && data.success) {
-            showLoadingMessage(false);
-            
-            // Redirect based on user type
-            if (data.user_type === 'admin') {
-                window.location.href = '/admin.html';
-            } else if (data.user_type === 'reviewer') {
-                window.location.href = '/reviewer.html';
-            } else {
-                window.location.href = '/';
-            }
-        } else {
-            showLoadingMessage(false);
-            showErrorMessage(data.error || 'خطأ في تسجيل الدخول');
-        }
-    } catch (error) {
-        console.error('Login error:', error);
-        showLoadingMessage(false);
-        showErrorMessage('خطأ في الاتصال بالخادم');
-    }
+// GET JSON عام يعيد {data, status}
+async function apiGetJSON(path) {
+  const res = await fetch(path, { method: 'GET' });
+  const data = await res.json();
+  return { data, status: res.status };
 }
 
-// Show error message
-function showErrorMessage(message) {
-    const errorEl = document.getElementById('errorMessage');
-    if (errorEl) {
-        errorEl.textContent = message;
-        errorEl.style.display = 'block';
-        
-        // Hide after 5 seconds
-        setTimeout(() => {
-            hideErrorMessage();
-        }, 5000);
-    }
+// POST FormData (مثلاً لرفع CSV) — لا تحدد Content-Type يدوياً!
+async function apiPostForm(path, formData) {
+  const res = await fetch(path, { method: 'POST', body: formData });
+  // بعض النهايات قد لا تعيد JSON هنا — نحاول ون fallback إلى نص
+  try {
+    const data = await res.clone().json();
+    return { data, status: res.status };
+  } catch {
+    const text = await res.text();
+    return { data: { raw: text }, status: res.status };
+  }
 }
 
-// Hide error message
-function hideErrorMessage() {
-    const errorEl = document.getElementById('errorMessage');
-    if (errorEl) {
-        errorEl.style.display = 'none';
-    }
+/* دوال المصادقة (تستعملها صفحات الدخول/لوحة الإدارة) */
+
+async function login(username, password) {
+  return apiPostJSON('/api/login', { username, password });
 }
 
-// Show/hide loading message
-function showLoadingMessage(show) {
-    const loadingEl = document.getElementById('loadingMessage');
-    if (loadingEl) {
-        loadingEl.style.display = show ? 'block' : 'none';
-    }
+async function logout() {
+  return apiPostJSON('/api/logout', {});
 }
 
-// Toggle password visibility
-function togglePassword() {
-    const passwordInput = document.getElementById('password');
-    const toggleBtn = document.querySelector('.toggle-password i');
-    
-    if (passwordInput.type === 'password') {
-        passwordInput.type = 'text';
-        toggleBtn.className = 'fas fa-eye-slash';
-    } else {
-        passwordInput.type = 'password';
-        toggleBtn.className = 'fas fa-eye';
-    }
+async function checkSession() {
+  return apiGetJSON('/api/check-session');
 }
 
+/* تعريض دوال auth/global للملفات الأخرى */
+window.auth = {
+  login,
+  logout,
+  checkSession,
+  apiGetJSON,
+  apiPostJSON,
+  apiPostForm
+};
