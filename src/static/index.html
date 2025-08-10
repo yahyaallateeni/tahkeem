@@ -1,104 +1,115 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>منصة التحكيم - تسجيل الدخول</title>
-    <link rel="stylesheet" href="css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>منصة التحكيم - تسجيل الدخول</title>
+
+  <link rel="stylesheet" href="css/style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
 </head>
 <body>
-    <div class="login-container">
-        <div class="login-card">
-            <div class="login-header">
-                <div class="logo">
-                    <i class="fas fa-gavel"></i>
-                </div>
-                <h1>منصة التحكيم</h1>
-                <p>نظام مراجعة وتصنيف النصوص</p>
-            </div>
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-header">
+        <!-- الشعار محذوف -->
+        <h1>منصة التحكيم</h1>
+        <p>نظام مراجعة وتصنيف النصوص</p>
+      </div>
 
-            <form id="loginForm" class="login-form">
-                <div class="form-group">
-                    <label for="username">اسم المستخدم</label>
-                    <div class="input-group">
-                        <i class="fas fa-user"></i>
-                        <input type="text" id="username" name="username" required>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="password">كلمة المرور</label>
-                    <div class="input-group">
-                        <i class="fas fa-lock"></i>
-                        <input type="password" id="password" name="password" required>
-                        <button type="button" class="toggle-password" onclick="togglePassword()">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <button type="submit" class="login-btn">
-                    <span>تسجيل الدخول</span>
-                    <i class="fas fa-arrow-left"></i>
-                </button>
-            </form>
-
-            <div id="errorMessage" class="error-message" style="display: none;"></div>
-            <div id="loadingMessage" class="loading-message" style="display: none;">
-                <i class="fas fa-spinner fa-spin"></i>
-                جاري تسجيل الدخول...
-            </div>
+      <!-- مهم: لا يوجد action أو method=GET -->
+      <form id="loginForm" class="login-form">
+        <div class="form-group">
+          <label for="username">اسم المستخدم</label>
+          <div class="input-group">
+            <i class="fas fa-user"></i>
+            <input type="text" id="username" name="username" required/>
+          </div>
         </div>
 
-        <div class="features-section">
-            <h2>ميزات المنصة</h2>
-            <div class="features-grid">
-                <div class="feature-card">
-                    <i class="fas fa-upload"></i>
-                    <h3>رفع البيانات</h3>
-                    <p>رفع ملفات CSV مع معالجة تلقائية للتنسيقات المختلفة</p>
-                </div>
-                <div class="feature-card">
-                    <i class="fas fa-check-circle"></i>
-                    <h3>مراجعة ذكية</h3>
-                    <p>واجهة سهلة لمراجعة وتصنيف النصوص بكفاءة عالية</p>
-                </div>
-                <div class="feature-card">
-                    <i class="fas fa-chart-bar"></i>
-                    <h3>إحصائيات تفصيلية</h3>
-                    <p>تتبع التقدم والأداء مع تقارير شاملة</p>
-                </div>
-                <div class="feature-card">
-                    <i class="fas fa-users"></i>
-                    <h3>إدارة المستخدمين</h3>
-                    <p>نظام صلاحيات متقدم للآدمن والمحكمين</p>
-                </div>
-            </div>
+        <div class="form-group">
+          <label for="password">كلمة المرور</label>
+          <div class="input-group">
+            <i class="fas fa-lock"></i>
+            <input type="password" id="password" name="password" required/>
+            <button type="button" class="toggle-password" onclick="togglePassword()">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
         </div>
+
+        <button type="submit" class="login-btn">
+          <span>تسجيل الدخول</span>
+          <i class="fas fa-arrow-left"></i>
+        </button>
+      </form>
+
+      <!-- صندوق الخطأ المعتمد من auth.js -->
+      <div id="loginError" class="error-message" style="display:none;"></div>
+
+      <div id="loadingMessage" class="loading-message" style="display:none;">
+        <i class="fas fa-spinner fa-spin"></i>
+        جاري تسجيل الدخول...
+      </div>
     </div>
 
-    <script src="js/auth.js"></script>
-    <script>
-        function togglePassword() {
-            const passwordInput = document.getElementById('password');
-            const toggleBtn = document.querySelector('.toggle-password i');
-            
-            if (passwordInput.type === 'password') {
-                passwordInput.type = 'text';
-                toggleBtn.className = 'fas fa-eye-slash';
-            } else {
-                passwordInput.type = 'password';
-                toggleBtn.className = 'fas fa-eye';
-            }
-        }
+    <div class="features-section">
+      <h2>ميزات المنصة</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <i class="fas fa-upload"></i>
+          <h3>رفع البيانات</h3>
+          <p>رفع ملفات CSV مع معالجة تلقائية للتنسيقات المختلفة</p>
+        </div>
+        <div class="feature-card">
+          <i class="fas fa-check-circle"></i>
+          <h3>مراجعة ذكية</h3>
+          <p>واجهة سهلة لمراجعة وتصنيف النصوص بكفاءة عالية</p>
+        </div>
+        <div class="feature-card">
+          <i class="fas fa-chart-bar"></i>
+          <h3>إحصائيات تفصيلية</h3>
+          <p>تتبع التقدم والأداء مع تقارير شاملة</p>
+        </div>
+        <div class="feature-card">
+          <i class="fas fa-users"></i>
+          <h3>إدارة المستخدمين</h3>
+          <p>نظام صلاحيات متقدم للآدمن والمحكمين</p>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        // التحقق من الجلسة الموجودة عند تحميل الصفحة
-        document.addEventListener('DOMContentLoaded', function() {
-            checkExistingSession();
-        });
-    </script>
+  <!-- حمّل auth.js أولاً ليضيف اعتراض fetch ودوال auth -->
+  <script src="js/auth.js"></script>
+  <script>
+    // تبديل إظهار/إخفاء كلمة المرور
+    function togglePassword() {
+      const passwordInput = document.getElementById('password');
+      const toggleIcon = document.querySelector('.toggle-password i');
+      if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        toggleIcon.className = 'fas fa-eye-slash';
+      } else {
+        passwordInput.type = 'password';
+        toggleIcon.className = 'fas fa-eye';
+      }
+    }
+
+    // إن كان المستخدم مسجلاً مسبقاً، حوّله مباشرة للوحة المناسبة
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (!window.auth || !window.auth.checkSession) return;
+      try {
+        const { data, status } = await window.auth.checkSession();
+        if (status === 200 && data && data.logged_in) {
+          const role = (data.user_type || '').toLowerCase();
+          window.location.href = role === 'admin' ? '/admin.html' : '/reviewer.html';
+        }
+      } catch (_) {
+        // تجاهل؛ المستخدم غير مسجل دخول
+      }
+    });
+  </script>
 </body>
 </html>
-
