@@ -9,6 +9,7 @@ import traceback
 
 from src.models.tagging import db, TaggingData, TaggingReview, UploadSession, get_arabic_tag
 from src.models.user import User
+from .decorators import admin_required
 
 tagging_bp = Blueprint('tagging', __name__)
 
@@ -90,15 +91,10 @@ def parse_excel_specific(file_path):
 
 # ========== رفع ملف (Excel فقط) ==========
 @tagging_bp.route('/upload-csv', methods=['POST'])  # احتفاظ بالمسار القديم لواجهةك
+@admin_required
 def upload_csv():
     try:
-        if 'user_id' not in session:
-            return jsonify({'error': 'unauthorized'}), 401
-
         user = User.query.get(session['user_id'])
-        if not user or (user.user_type or '').lower() != 'admin':
-            return jsonify({'error': 'forbidden'}), 403
-
         if 'file' not in request.files:
             return jsonify({'error': 'لم يتم اختيار ملف'}), 400
 
@@ -277,15 +273,9 @@ def get_stats():
 
 # ========== جلسات الرفع ==========
 @tagging_bp.route('/upload-sessions', methods=['GET'])
+@admin_required
 def get_upload_sessions():
     try:
-        if 'user_id' not in session:
-            return jsonify({'error': 'unauthorized'}), 401
-
-        user = User.query.get(session['user_id'])
-        if not user or (user.user_type or '').lower() != 'admin':
-            return jsonify({'error': 'forbidden'}), 403
-
         sessions = UploadSession.query.order_by(UploadSession.uploaded_at.desc()).all()
         out = []
         for s in sessions:
@@ -306,15 +296,9 @@ def get_upload_sessions():
 
 # ========== إحصائيات اليوم ==========
 @tagging_bp.route('/daily-stats', methods=['GET'])
+@admin_required
 def get_daily_stats():
     try:
-        if 'user_id' not in session:
-            return jsonify({'error': 'unauthorized'}), 401
-
-        user = User.query.get(session['user_id'])
-        if not user or (user.user_type or '').lower() != 'admin':
-            return jsonify({'error': 'forbidden'}), 403
-
         today = datetime.now().date()
         daily_reviews = db.session.query(func.count(TaggingReview.id))\
             .filter(TaggingReview.reviewed_at >= today).scalar() or 0
@@ -335,15 +319,9 @@ def get_daily_stats():
 
 # ========== إحصائيات المحكّمين ==========
 @tagging_bp.route('/reviewer-stats', methods=['GET'])
+@admin_required
 def get_reviewer_stats():
     try:
-        if 'user_id' not in session:
-            return jsonify({'error': 'unauthorized'}), 401
-
-        user = User.query.get(session['user_id'])
-        if not user or (user.user_type or '').lower() != 'admin':
-            return jsonify({'error': 'forbidden'}), 403
-
         reviewers = User.query.filter_by(user_type='reviewer').all()
         out = []
         for r in reviewers:

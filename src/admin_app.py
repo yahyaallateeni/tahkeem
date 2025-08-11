@@ -1,13 +1,13 @@
 import os
 import sys
-import subprocess
 from datetime import timedelta
 from flask import Flask, send_from_directory, jsonify, session, request
 from flask_cors import CORS
 
-# ضف المسار حتى تعمل استيرادات src.*
+# ضف مسار جذر المشروع حتى تعمل استيرادات src.*
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+from src.config import get_secret_key
 from src.models.user import db
 from src.models.tagging import TaggingData, TaggingReview, UploadSession  # noqa: F401
 from src.routes.user import user_bp
@@ -15,7 +15,7 @@ from src.routes.tagging import tagging_bp
 
 # ===== إنشاء التطبيق والملفات الثابتة =====
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'tagging-platform-secret-key-2024-final')
+app.config['SECRET_KEY'] = get_secret_key()
 
 # إعدادات الجلسة (مهم لحفظ الكوكي على HTTPS/Render)
 app.config.update(
@@ -47,16 +47,9 @@ db.init_app(app)
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(tagging_bp, url_prefix='/api/tagging')
 
-# ===== تهيئة الجداول وإنشاء أدمن مرة واحدة =====
+# ===== تهيئة الجداول =====
 with app.app_context():
     db.create_all()
-    print("Running create_admin.py script...")
-    try:
-        # نفّذ السكربت من جذر المشروع (مكان هذا الملف)
-        subprocess.run(['python', 'src/create_admin.py'], check=True, cwd=os.path.dirname(__file__))
-        print("create_admin.py script finished.")
-    except subprocess.CalledProcessError as e:
-        print(f"Error running create_admin.py: {e}")
 
 # ====== نقاط فحص سريعة (لا تُكسر الواجهة) ======
 @app.get('/api/health')

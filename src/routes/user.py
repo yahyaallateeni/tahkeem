@@ -1,9 +1,11 @@
 from flask import Blueprint, request, jsonify, session
 from src.models.user import User, Sentence, Annotation, ContactMessage, db
+from .decorators import admin_required
 import csv
 import os
 import json
 import chardet
+import io
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import traceback
@@ -78,21 +80,16 @@ def register():
 
 # ========== إدارة المستخدمين (للآدمن) ==========
 @user_bp.route('/admin/users', methods=['GET'])
+@admin_required
 def get_all_users_legacy():
     # مسار قديم إن كان مستخدماً في الواجهة
     return get_users()
 
 @user_bp.route('/users', methods=['GET'])
+@admin_required
 def get_users():
     """جلب قائمة المستخدمين (للآدمن فقط) مع معالجة أخطاء واضحة"""
     try:
-        if 'user_id' not in session:
-            return jsonify({'error': 'unauthorized'}), 401
-
-        me = User.query.get(session['user_id'])
-        if not me or (getattr(me, 'user_type', '') or '').lower() != 'admin':
-            return jsonify({'error': 'forbidden'}), 403
-
         users = User.query.all()
         out = []
         for u in users:
@@ -109,10 +106,8 @@ def get_users():
         return jsonify({'error': 'server_error', 'details': str(e)}), 500
 
 @user_bp.route('/admin/users', methods=['POST'])
+@admin_required
 def create_user_by_admin():
-    if (session.get('user_type') or '').lower() != 'admin':
-        return {"detail": "غير مصرح لك بالوصول"}, 403
-
     data = request.get_json() if request.is_json else request.form
     username = (data or {}).get('username')
     password = (data or {}).get('password')
@@ -139,10 +134,8 @@ def create_user_by_admin():
     }}
 
 @user_bp.route('/admin/users/<user_id>', methods=['DELETE'])
+@admin_required
 def delete_user_by_admin(user_id):
-    if (session.get('user_type') or '').lower() != 'admin':
-        return {"detail": "غير مصرح لك بالوصول"}, 403
-
     user = User.query.get_or_404(user_id)
     if user.id == session.get('user_id'):
         return {"detail": "لا يمكنك حذف حسابك الخاص"}, 400
@@ -165,10 +158,16 @@ def upload_csv():
         if not file.filename.endswith('.csv'):
             return {"detail": "يجب أن يكون الملف من نوع CSV"}, 400
 
-        content_bytes = file.read()
-        enc = (chardet.detect(content_bytes) or {}).get('encoding') or 'utf-8'
-        content = content_bytes.decode(enc, errors='ignore')
-        reader = csv.DictReader(content.splitlines())
+        stream = file.stream
+        stream.seek(0, os.SEEK_END)
+        if stream.tell() > 5 * 1024 * 1024:
+            return {"detail": "حجم الملف يتجاوز الحد المسموح (5MB)"}, 400
+        stream.seek(0)
+        sample = stream.read(1024)
+        enc = (chardet.detect(sample) or {}).get('encoding') or 'utf-8'
+        stream.seek(0)
+        text_stream = io.TextIOWrapper(stream, encoding=enc, errors='ignore')
+        reader = csv.DictReader(text_stream)
 
         sentences_added = 0
         for row in reader:
@@ -251,9 +250,8 @@ def submit_contact():
     return {"message": "تم إرسال رسالتك بنجاح"}
 
 @user_bp.route('/admin/messages', methods=['GET'])
+@admin_required
 def get_contact_messages():
-    if (session.get('user_type') or '').lower() != 'admin':
-        return {"detail": "غير مصرح لك بالوصول"}, 403
     messages = ContactMessage.query.order_by(ContactMessage.created_at.desc()).all()
     out = []
     for m in messages:
@@ -265,9 +263,8 @@ def get_contact_messages():
     return jsonify(out)
 
 @user_bp.route('/admin/messages/<message_id>/read', methods=['POST'])
+@admin_required
 def mark_message_read(message_id):
-    if (session.get('user_type') or '').lower() != 'admin':
-        return {"detail": "غير مصرح لك بالوصول"}, 403
     message = ContactMessage.query.get_or_404(message_id)
     message.is_read = True
     db.session.commit()

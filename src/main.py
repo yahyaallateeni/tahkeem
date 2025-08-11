@@ -2,6 +2,7 @@ import os
 import sys
 from flask import Flask, send_from_directory, jsonify
 from flask_cors import CORS
+from src.config import get_secret_key
 
 # اجعل مسار src متاحاً قبل الاستيراد
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -15,7 +16,7 @@ from src.routes.tagging import tagging_bp
 # Flask app & basic configs
 # -------------------------
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
-app.config['SECRET_KEY'] = 'tagging-platform-secret-key-2024-final'
+app.config['SECRET_KEY'] = get_secret_key()
 
 # كوكي الجلسة مناسبة لـ HTTPS على Render
 app.config['SESSION_COOKIE_SAMESITE'] = 'None'
@@ -68,44 +69,6 @@ with app.app_context():
         # لو كان بالفعل TEXT أو مناسب؛ تجاهل
         print("Skip/ignore password_hash alter (maybe already TEXT):", e)
 
-    # 3) احذف أي admin قديم (تفادي بيانات تالفة) ثم أنشئه من جديد
-    try:
-        from sqlalchemy import text
-        db.session.execute(text("DELETE FROM users WHERE username = 'admin'"))
-        db.session.commit()
-        print("Old admin rows deleted (if existed).")
-    except Exception as e:
-        db.session.rollback()
-        print("Skip admin delete:", e)
-
-    try:
-        cols = set(User.__table__.columns.keys())
-        admin = User(username='admin')
-
-        # اضبط الدور إن وُجد
-        if 'user_type' in cols:
-            admin.user_type = 'admin'
-        elif 'role' in cols:
-            admin.role = 'admin'
-
-        # عيّن كلمة المرور (متوافقة مع check_password)
-        if hasattr(admin, 'set_password') and callable(getattr(admin, 'set_password')):
-            admin.set_password('admin123')
-        else:
-            from werkzeug.security import generate_password_hash
-            if 'password_hash' in cols:
-                admin.password_hash = generate_password_hash('admin123')
-            elif 'password' in cols:
-                admin.password = 'admin123'
-            else:
-                raise RuntimeError("No password field found on User model.")
-
-        db.session.add(admin)
-        db.session.commit()
-        print("Admin ready: username=admin, password=admin123")
-    except Exception as e:
-        db.session.rollback()
-        print("Admin creation/reset error:", e)
 
 # -------------------------
 # Error handlers (JSON only)
