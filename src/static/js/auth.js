@@ -28,8 +28,7 @@ function showMessage(id, text, show = true) {
 function redirectToDashboard(userType) {
   const target = (userType === 'admin') ? 'admin.html' : 'reviewer.html';
   const here = (window.location.pathname.split('/').pop() || 'index.html').toLowerCase();
-  // إذا كنا بالفعل على الصفحة الهدف، لا تفعل شيئًا لتجنب الارتعاش
-  if (here === target.toLowerCase()) return;
+  if (here === target.toLowerCase()) return; // لا تعِد التوجيه لنفس الصفحة
   window.location.href = target;
 }
 
@@ -44,8 +43,8 @@ document.addEventListener('DOMContentLoaded', () => {
       showMessage('errorMessage', '', false);
       showMessage('loadingMessage', 'جاري تسجيل الدخول...', true);
 
-      const username = document.getElementById('username')?.value.trim();
-      const password = document.getElementById('password')?.value.trim();
+      const username = document.getElementById('username')?.value?.trim();
+      const password = document.getElementById('password')?.value?.trim();
 
       try {
         const res = await fetch('/api/login', {
@@ -58,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (res.ok) {
           redirectToDashboard(data.user_type);
         } else {
-          showMessage('errorMessage', data.detail || 'فشل تسجيل الدخول');
+          showMessage('errorMessage', data.detail || data.error || data.message || 'فشل تسجيل الدخول');
         }
       } catch (err) {
         console.error('Login error:', err);
@@ -83,12 +82,12 @@ async function checkExistingSession() {
   try {
     const res = await fetch('/api/check-session', { cache: 'no-store' });
     if (!res.ok) {
-      // في حالة 401 لا نعيد تحميل الصفحة؛ فقط نتجاهل ونترك المستخدم يسجل دخول
+      // 401 → تجاهل فقط ودَع المستخدم يسجّل الدخول
       return;
     }
     const data = await res.json().catch(() => ({}));
-    if (data.logged_in) {
-      redirectToDashboard(data.user_type); // التوجيه الآن آمن بسبب الحارس
+    if (data?.logged_in) {
+      redirectToDashboard(data.user_type);
     }
   } catch (err) {
     console.warn('Session check failed:', err);
@@ -104,7 +103,6 @@ async function logout() {
   } catch (err) {
     console.error('Logout error:', err);
   } finally {
-    // بعد الخروج، نعود لصفحة الدخول
     const here = (window.location.pathname.split('/').pop() || 'index.html').toLowerCase();
     if (here !== 'index.html') window.location.href = 'index.html';
   }
@@ -132,7 +130,7 @@ function wireUploadIfExists() {
     if (!f) { setMsg('اختر ملفًا أولاً', false); return; }
 
     const fd = new FormData();
-    fd.append('file', f); // <-- مهم: الاسم الذي ينتظره الباك إند في /api/tagging/upload-csv
+    fd.append('file', f); // <-- الاسم الذي ينتظره الباك إند في /api/tagging/upload-csv
 
     try {
       const res = await fetch('/api/tagging/upload-csv', {
@@ -141,8 +139,9 @@ function wireUploadIfExists() {
       });
       const txt = await res.text();
       let data; try { data = JSON.parse(txt); } catch {}
+
       if (res.ok) {
-        setMsg(تم: إجمالي=${data?.total_records ?? '-'}، ناجح=${data?.successful_records ?? '-'}، فشل=${data?.failed_records ?? '-'}, true);
+        setMsg(`تم: إجمالي=${data?.total_records ?? '-'}، ناجح=${data?.successful_records ?? '-'}، فشل=${data?.failed_records ?? '-'}`, true);
         console.log('STATUS:', res.status, 'BODY:', txt);
       } else {
         setMsg(data?.error || data?.detail || ('خطأ ' + res.status), false);
