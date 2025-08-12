@@ -142,7 +142,7 @@ function wireUploadIfExists() {
       const txt = await res.text();
       let data; try { data = JSON.parse(txt); } catch {}
       if (res.ok) {
-        setMsg(`تم: إجمالي=${data?.total_records ?? '-'}، ناجح=${data?.successful_records ?? '-'}، فشل=${data?.failed_records ?? '-'}`, true);
+        setMsg(تم: إجمالي=${data?.total_records ?? '-'}، ناجح=${data?.successful_records ?? '-'}، فشل=${data?.failed_records ?? '-'}, true);
         console.log('STATUS:', res.status, 'BODY:', txt);
       } else {
         setMsg(data?.error || data?.detail || ('خطأ ' + res.status), false);
